@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: observability-awx
+  namespace: awx
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /awx
+            pathType: Prefix
+            backend:
+              service:
+                name: observability-awx-service
+                port:
+                  number: 80

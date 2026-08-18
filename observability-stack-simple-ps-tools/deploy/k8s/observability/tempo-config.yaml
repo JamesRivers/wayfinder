@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+data:
+  tempo.yaml: |
+    multitenancy_enabled: false
+    target: all
+
+    server:
+      http_listen_port: 3200
+
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+            http:
+
+    storage:
+      trace:
+        backend: s3
+        s3:
+          bucket: tempo
+          prefix: tempo
+          endpoint: garage.storage.svc.cluster.local:3900
+          region: garage
+          access_key: eeb12a6b2ee2be3623c17ec3aa5f994c
+          secret_key: fc121e860c2ec4c30ffd5d244f9ee47e
+          insecure: true
+          forcepathstyle: true
+

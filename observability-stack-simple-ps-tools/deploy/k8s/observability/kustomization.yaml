@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+resources:
+  - namespace.yaml
+  - grafana-config.yaml
+  - grafana-datasources.yaml
+  - grafana-pvc.yaml
+  - grafana-deployment.yaml
+  - grafana-service.yaml
+  - grafana-ingress.yaml
+  - prometheus-config.yaml
+  - prometheus-pvc.yaml
+  - prometheus-deployment.yaml
+  - prometheus-service.yaml
+  - mimir-config.yaml
+  - mimir-pvc.yaml
+  - mimir-deployment.yaml
+  - mimir-service.yaml
+  - tempo-config.yaml
+  - tempo-pvc.yaml
+  - tempo-deployment.yaml
+  - tempo-service.yaml
+  - loki-config.yaml
+  - loki-pvc.yaml
+  - loki-deployment.yaml
+  - loki-service.yaml
