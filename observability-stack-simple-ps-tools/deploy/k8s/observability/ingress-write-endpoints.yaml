@@ -1,0 +1,61 @@
+# Traefik IngressRoutes for Alloy remote_write and log push endpoints
+# These expose Mimir and Loki write paths through Traefik on port 80
+# so that remote Alloy agents can push metrics and logs to
+# http://<mon_fqdn>/mimir/... and http://<mon_fqdn>/loki/...
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-mimir-prefix
+  namespace: observability
+spec:
+  stripPrefix:
+    prefixes:
+      - /mimir
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-loki-prefix
+  namespace: observability
+spec:
+  stripPrefix:
+    prefixes:
+      - /loki
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mimir-write
+  namespace: observability
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/mimir`)
+      kind: Rule
+      middlewares:
+        - name: strip-mimir-prefix
+      services:
+        - name: mimir
+          port: 9009
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loki-push
+  namespace: observability
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/loki`)
+      kind: Rule
+      middlewares:
+        - name: strip-loki-prefix
+      services:
+        - name: loki
+          port: 3100

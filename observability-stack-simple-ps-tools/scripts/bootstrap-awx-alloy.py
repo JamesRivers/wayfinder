@@ -36,6 +36,8 @@ DEFAULT_REPO = os.environ.get(
     "AWX_REPO_URL", "git://172.16.47.163:9418/alloy-template-bundle.git"
 )
 DEFAULT_PLAYBOOK = os.environ.get("AWX_PLAYBOOK", "playbooks/alloy-deploy.yml")
+DEFAULT_MACHINE_CREDENTIAL = os.environ.get("AWX_MACHINE_CREDENTIAL_NAME", "local-linux-test")
+DEFAULT_CONFIRM_RUN = os.environ.get("AWX_CONFIRM_RUN", "yes")
 DEFAULT_SYNC = os.environ.get("AWX_SYNC_PROJECT", "true").lower() in {"1", "true", "yes", "on"}
 DEFAULT_TIMEOUT = int(os.environ.get("AWX_SYNC_TIMEOUT", "600"))
 
@@ -105,6 +107,28 @@ class AWXClient:
         obj = self.request("POST", path, payload)
         return obj, True
 
+    def ensure_association(self, path: str, obj_id: int) -> bool:
+        existing = self.request("GET", path)
+        if isinstance(existing, dict):
+            results = existing.get("results", [])
+            if any(item.get("id") == obj_id for item in results):
+                return False
+        self.request("POST", path, {"id": obj_id})
+        return True
+
+    def ensure_template_extra_vars(self, template_id: int, key: str, value: Any) -> bool:
+        template = self.request("GET", f"/api/v2/job_templates/{template_id}/")
+        raw = template.get("extra_vars") or "{}"
+        try:
+            current = json.loads(raw)
+        except json.JSONDecodeError:
+            current = {}
+        if current.get(key) == value:
+            return False
+        current[key] = value
+        self.request("PATCH", f"/api/v2/job_templates/{template_id}/", {"extra_vars": json.dumps(current)})
+        return True
+
 
 def wait_for_project_sync(client: AWXClient, project_id: int, timeout_s: int) -> dict[str, Any]:
     started = client.request("POST", f"/api/v2/projects/{project_id}/update/")
@@ -137,6 +161,8 @@ def main() -> int:
     parser.add_argument("--branch", default=DEFAULT_BRANCH)
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--playbook", default=DEFAULT_PLAYBOOK)
+    parser.add_argument("--machine-credential", default=DEFAULT_MACHINE_CREDENTIAL)
+    parser.add_argument("--confirm-run", default=DEFAULT_CONFIRM_RUN)
     parser.add_argument("--sync-project", action=argparse.BooleanOptionalAction, default=DEFAULT_SYNC)
     parser.add_argument("--sync-timeout", type=int, default=DEFAULT_TIMEOUT)
     args = parser.parse_args()
@@ -190,6 +216,18 @@ def main() -> int:
         },
         update_fields=["inventory", "project", "playbook", "verbosity", "ask_inventory_on_launch", "ask_credential_on_launch", "ask_variables_on_launch", "ask_limit_on_launch"],
     )
+
+    if args.machine_credential:
+        creds = client.get_list("/api/v2/credentials/", args.machine_credential)
+        if not creds:
+            raise RuntimeError(f"credential {args.machine_credential!r} not found in AWX")
+        attached = client.ensure_association(f"/api/v2/job_templates/{template['id']}/credentials/", creds[0]["id"])
+        if attached:
+            eprint(f"Attached credential {args.machine_credential!r} to job template {template['name']}")
+    if args.confirm_run:
+        changed = client.ensure_template_extra_vars(template["id"], "confirm_run", args.confirm_run)
+        if changed:
+            eprint(f"Set confirm_run={args.confirm_run!r} on job template {template['name']}")
 
     summary = {
         "organization": {"id": org["id"], "name": org["name"], "created_or_updated": created_org},

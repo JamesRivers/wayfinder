@@ -28,6 +28,7 @@ data:
 
     ingester:
       ring:
+        replication_factor: 1
         kvstore:
           store: memberlist
 
