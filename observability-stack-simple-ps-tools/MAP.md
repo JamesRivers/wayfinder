@@ -21,6 +21,8 @@ A locked design for a K3s-based observability stack with Grafana, Mimir, Prometh
 
 ## Not yet specified
 
+- How the full Alloy bundle template set should be refactored so that write endpoints, component defaults, and product-group mappings work out of the box for new targets without manual AWX variable setup — currently tracked as individual issues in ticket 06 but may expand.
+
 ## Out of scope
 
 - Docker-only deployment for this effort; the destination has been redrawn around K3s.
