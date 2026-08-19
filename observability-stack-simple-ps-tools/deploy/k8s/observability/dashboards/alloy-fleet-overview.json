@@ -1,0 +1,498 @@
+{
+  "dashboard": {
+    "uid": "alloy-fleet-overview",
+    "title": "Alloy Fleet Overview",
+    "description": "Tracks all deployed Alloy agents — version, product type, uptime, health, and resource usage",
+    "tags": ["alloy", "fleet", "observability"],
+    "timezone": "browser",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Agents Online",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "count(up{job=\"integrations/self\"} == 1)",
+            "legendFormat": "Online",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "color": { "mode": "thresholds" },
+            "unit": "none"
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Agents Offline",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "count(up{job=\"integrations/self\"} == 0) OR on() vector(0)",
+            "legendFormat": "Offline",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 1 }
+              ]
+            },
+            "color": { "mode": "thresholds" },
+            "unit": "none"
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Total Scrape Targets",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "count(up)",
+            "legendFormat": "Targets",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "blue", "value": null }
+              ]
+            },
+            "color": { "mode": "thresholds" },
+            "unit": "none"
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Remote Write Success Rate",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "sum(rate(prometheus_remote_storage_samples_total[5m])) / (sum(rate(prometheus_remote_storage_samples_total[5m])) + sum(rate(prometheus_remote_storage_samples_failed_total[5m]))) * 100",
+            "legendFormat": "Success %",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 95 },
+                { "color": "green", "value": 99 }
+              ]
+            },
+            "color": { "mode": "thresholds" },
+            "unit": "percent",
+            "decimals": 1
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value",
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 5,
+        "title": "Alloy Agent Fleet",
+        "type": "table",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "alloy_build_info",
+            "legendFormat": "",
+            "refId": "A",
+            "instant": true,
+            "format": "table"
+          },
+          {
+            "expr": "up{job=\"integrations/self\"}",
+            "legendFormat": "",
+            "refId": "B",
+            "instant": true,
+            "format": "table"
+          },
+          {
+            "expr": "time() - alloy_resources_process_start_time_seconds",
+            "legendFormat": "",
+            "refId": "C",
+            "instant": true,
+            "format": "table"
+          },
+          {
+            "expr": "ic_instrumentation_info",
+            "legendFormat": "",
+            "refId": "D",
+            "instant": true,
+            "format": "table"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "merge"
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "branch": true,
+                "goarch": true,
+                "goos": true,
+                "goversion": true,
+                "tags": true,
+                "revision": true,
+                "Value #A": true,
+                "Value #D": true
+              },
+              "renameByName": {
+                "instance": "Instance",
+                "product": "Product",
+                "version": "Alloy Version",
+                "Value #B": "Status",
+                "Value #C": "Uptime (s)",
+                "job": "Job",
+                "version 1": "Bundle Version"
+              },
+              "indexByName": {
+                "Instance": 0,
+                "Product": 1,
+                "Alloy Version": 2,
+                "Bundle Version": 3,
+                "Status": 4,
+                "Uptime (s)": 5,
+                "Job": 6
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Status" },
+              "properties": [
+                {
+                  "id": "mappings",
+                  "value": [
+                    { "type": "value", "options": { "1": { "text": "UP", "color": "green" }, "0": { "text": "DOWN", "color": "red" } } }
+                  ]
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": { "type": "color-background" }
+                }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Uptime (s)" },
+              "properties": [
+                { "id": "unit", "value": "s" }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [{ "displayName": "Instance", "desc": false }]
+        }
+      },
+      {
+        "id": 6,
+        "title": "Agent Health Timeline",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 24, "x": 0, "y": 12 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "up{job=\"integrations/self\"}",
+            "legendFormat": "{{ instance }} ({{ product }})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 30,
+              "lineWidth": 2,
+              "stacking": { "mode": "none" },
+              "showPoints": "never"
+            },
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "color": { "mode": "thresholds" },
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN" }, "1": { "text": "UP" } } }
+            ]
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi" },
+          "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Agent CPU Usage",
+        "type": "timeseries",
+        "gridPos": { "h": 7, "w": 12, "x": 0, "y": 18 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "rate(alloy_resources_process_cpu_seconds_total[5m])",
+            "legendFormat": "{{ instance }}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "lineWidth": 1,
+              "showPoints": "never"
+            },
+            "unit": "percentunit",
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi" },
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Agent Memory Usage",
+        "type": "timeseries",
+        "gridPos": { "h": 7, "w": 12, "x": 12, "y": 18 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "alloy_resources_process_resident_memory_bytes",
+            "legendFormat": "{{ instance }}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "lineWidth": 1,
+              "showPoints": "never"
+            },
+            "unit": "bytes",
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi" },
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Samples Sent Rate",
+        "type": "timeseries",
+        "gridPos": { "h": 7, "w": 12, "x": 0, "y": 25 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "rate(prometheus_remote_storage_samples_total[5m])",
+            "legendFormat": "{{ instance }} sent",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(prometheus_remote_storage_samples_failed_total[5m])",
+            "legendFormat": "{{ instance }} failed",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never"
+            },
+            "unit": "ops",
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi" },
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Running Components per Agent",
+        "type": "timeseries",
+        "gridPos": { "h": 7, "w": 12, "x": 12, "y": 25 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "alloy_component_controller_running_components",
+            "legendFormat": "{{ instance }} ({{ health_type }})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "lineWidth": 1,
+              "showPoints": "never"
+            },
+            "unit": "none",
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi" },
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Host Overview",
+        "type": "table",
+        "gridPos": { "h": 6, "w": 24, "x": 0, "y": 32 },
+        "datasource": { "type": "prometheus", "uid": "mimir" },
+        "targets": [
+          {
+            "expr": "node_uname_info",
+            "legendFormat": "",
+            "refId": "A",
+            "instant": true,
+            "format": "table"
+          },
+          {
+            "expr": "node_memory_MemTotal_bytes",
+            "legendFormat": "",
+            "refId": "B",
+            "instant": true,
+            "format": "table"
+          },
+          {
+            "expr": "node_load1",
+            "legendFormat": "",
+            "refId": "C",
+            "instant": true,
+            "format": "table"
+          }
+        ],
+        "transformations": [
+          { "id": "merge" },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "domainname": true,
+                "machine": true,
+                "sysname": true,
+                "Value #A": true
+              },
+              "renameByName": {
+                "instance": "Instance",
+                "product": "Product",
+                "nodename": "Hostname",
+                "release": "Kernel",
+                "Value #B": "Total RAM",
+                "Value #C": "Load 1m"
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Total RAM" },
+              "properties": [{ "id": "unit", "value": "bytes" }]
+            }
+          ]
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [{ "displayName": "Instance", "desc": false }]
+        }
+      }
+    ],
+    "time": { "from": "now-1h", "to": "now" },
+    "templating": { "list": [] }
+  },
+  "overwrite": true,
+  "folderId": 0
+}
