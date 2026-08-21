@@ -12,39 +12,51 @@ The stack runs entirely on a single K3s node. All user-facing traffic enters thr
 
 ```mermaid
 graph TB
+    BB["Bitbucket origin<br/>product-observavility.git"]
+
     subgraph "Remote targets"
         A1["local-linux-test<br/>172.16.47.163"]
         A2["local-linux-test2<br/>172.16.47.172"]
         AN["future targets..."]
     end
 
-    subgraph "monlog01 — K3s cluster (172.16.47.163)"
-        subgraph "kube-system"
-            TR["Traefik<br/>Ingress Controller<br/>:80 / :443"]
-        end
+    subgraph "monlog01 host / control-plane node"
+        WC["Working clone<br/>/home/imagine/product-observavility"]
+        GD["git-daemon<br/>:9418<br/>base-path=/tmp/git-repos"]
+        BR["AWX local bare repo<br/>/tmp/git-repos/alloy-template-bundle.git"]
 
-        subgraph "storage namespace"
-            GA["Garage v2.3.0<br/>S3-compatible<br/>object store"]
-        end
+        subgraph "K3s cluster (172.16.47.163)"
+            subgraph "kube-system"
+                TR["Traefik<br/>Ingress Controller<br/>:80 / :443"]
+            end
 
-        subgraph "observability namespace"
-            GR["Grafana 11.1.0<br/>Dashboard UI"]
-            PR["Prometheus v2.54.1<br/>Short-retention scraper"]
-            MI["Mimir 2.13.0<br/>Long-term metrics"]
-            LO["Loki 3.1.0<br/>Log aggregation"]
-            TE["Tempo 2.8.0<br/>Distributed traces"]
-        end
+            subgraph "storage namespace"
+                GA["Garage v2.3.0<br/>S3-compatible<br/>object store"]
+            end
 
-        subgraph "awx namespace"
-            AO["AWX Operator 2.19.1"]
-            AW["AWX Instance<br/>observability-awx"]
-            PG["PostgreSQL 15<br/>AWX database"]
-        end
+            subgraph "observability namespace"
+                GR["Grafana 11.1.0<br/>Dashboard UI"]
+                PR["Prometheus v2.54.1<br/>Short-retention scraper"]
+                MI["Mimir 2.13.0<br/>Long-term metrics"]
+                LO["Loki 3.1.0<br/>Log aggregation"]
+                TE["Tempo 2.8.0<br/>Distributed traces"]
+            end
 
-        subgraph "ai namespace"
-            MC["Grafana MCP<br/>AI read-only bridge"]
+            subgraph "awx namespace"
+                AO["AWX Operator 2.19.1"]
+                AW["AWX Instance<br/>observability-awx"]
+                PG["PostgreSQL 15<br/>AWX database"]
+            end
+
+            subgraph "ai namespace"
+                MC["Grafana MCP<br/>AI read-only bridge"]
+            end
         end
     end
+
+    BB -->|"git clone / git pull"| WC
+    WC -->|"git push local mirror"| BR
+    BR -->|"served over git://"| GD
 
     A1 -->|"metrics push<br/>/mimir/api/v1/push"| TR
     A1 -->|"logs push<br/>/loki/loki/api/v1/push"| TR
@@ -65,9 +77,12 @@ graph TB
     GR -->|"query"| TE
 
     AW --> PG
+    AW -->|"git clone/pull<br/>git://172.16.47.163:9418/alloy-template-bundle.git"| GD
     AW -->|"runs Alloy playbooks<br/>against targets"| A1
     AW -->|"runs Alloy playbooks<br/>against targets"| A2
 ```
+
+The Alloy templates are maintained in a normal working clone at `/home/imagine/product-observavility`, which is cloned from Bitbucket. AWX does not read Bitbucket directly; it reads the locally published bare mirror at `/tmp/git-repos/alloy-template-bundle.git` served by `git-daemon`.
 
 ## 2. Namespace layout
 
@@ -275,7 +290,7 @@ Each Alloy agent runs from `/etc/imagine/alloy/` with modular config files:
 
 ### 6.1 How it works
 
-AWX does not pull playbooks from GitHub or any external source. Instead, a **local bare git repository** on monlog01 serves as the project source via the `git://` protocol.
+AWX does not pull playbooks straight from Bitbucket or GitHub at job runtime. Instead, engineers keep a normal working clone on the host (for example `/home/imagine/product-observavility`, cloned from Bitbucket), and that working clone is published into a **local bare git repository** that AWX uses as its project source over the `git://` protocol.
 
 ```mermaid
 flowchart TB
@@ -311,7 +326,9 @@ flowchart TB
   --export-all --listen=0.0.0.0 --port=9418 /tmp/git-repos
 ```
 
-**Bare repository** — The Alloy bundle lives at `/tmp/git-repos/alloy-template-bundle.git`. This is the single source of truth for all Alloy playbooks and templates.
+**Bare repository** — The Alloy bundle that AWX reads lives at `/tmp/git-repos/alloy-template-bundle.git`. This is a local publish mirror for AWX consumption, not the human-edited working copy.
+
+**Working clone** — Engineers make template and playbook changes in `/home/imagine/product-observavility`, which is a normal git clone of the Bitbucket repo `product-observavility`.
 
 **AWX project** — The AWX project named `mon` is configured with:
 - SCM URL: `git://172.16.47.163:9418/alloy-template-bundle.git`
@@ -324,26 +341,30 @@ flowchart TB
 To update playbooks or templates:
 
 ```bash
-# Clone a working copy
-cd /tmp
-git clone git://172.16.47.163:9418/alloy-template-bundle.git
-cd alloy-template-bundle
+# Work in the Bitbucket-backed clone
+cd /home/imagine/product-observavility
+
+git pull origin main
 
 # Make changes...
-# e.g. edit templates/alloy/loki.source.journal.generic.alloy.j2
+# e.g. edit playbooks/templates/alloy/loki.source.journal.generic.alloy.j2
 
-# Commit
-git config user.email "deploy@localhost"
-git config user.name "Deploy"
+# Commit to the working repo
 git add -A
 git commit -m "Description of change"
 
-# Push back to the bare repo
-git remote set-url origin /tmp/git-repos/alloy-template-bundle.git
+# Publish the updated commit into the local AWX mirror
+git push /tmp/git-repos/alloy-template-bundle.git HEAD:refs/heads/main
+git --git-dir=/tmp/git-repos/alloy-template-bundle.git symbolic-ref HEAD refs/heads/main
+```
+
+If you also want the upstream Bitbucket repo updated, push there too:
+
+```bash
 git push origin main
 ```
 
-The next AWX job launch will automatically pull the updated commit because `scm_update_on_launch` is enabled.
+The next AWX job launch will automatically pull the updated commit from the local mirror because `scm_update_on_launch` is enabled.
 
 ### 6.3a Script-only bundle import when the source repo is `product-observavility`
 
