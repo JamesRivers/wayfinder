@@ -255,5 +255,5 @@ echo ""
 echo "  To add a host:  Use AWX UI at http://${HOST_IP}:30080"
 echo "                  or curl against ${AWX_URL}/hosts/"
 echo ""
-echo "  Next step:      run 06-setup-alloy-repo.sh (if not done)"
-echo "                  then 07-deploy-grafana-mcp.sh (optional)"
+echo "  Next step: bash ~/observability-stack/scripts/deploy/07-deploy-grafana-mcp.sh ~/observability-stack"
+

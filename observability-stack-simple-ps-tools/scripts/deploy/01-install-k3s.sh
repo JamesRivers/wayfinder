@@ -138,4 +138,4 @@ kubectl get svc -n kube-system traefik
 
 echo ""
 log "K3s installation complete"
-echo "  Next step: run 02-deploy-garage.sh"
+echo "  Next step: bash ~/observability-stack/scripts/deploy/02-deploy-garage.sh ~/observability-stack"
