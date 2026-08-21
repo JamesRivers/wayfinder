@@ -33,6 +33,6 @@ bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
 ```
 
 AWX items covered today:
-- Confirmed the AWX project `adt` syncs from the local git mirror and updated it to revision `2ec6bd2`.
+- Confirmed the AWX project `mon` syncs from the local git mirror and updated it to revision `2ec6bd2`.
 - Patched the Alloy bundle so Linux installs download `alloy-linux-amd64.zip` from the Grafana release archive, extract the binary, and install it to `/usr/local/bin/alloy` instead of consuming the host-local HTML response.
 - Re-ran the AWX project sync and relaunched `alloy-template` as job `30`; the launch reached the new revision but the job still needs follow-up debugging.

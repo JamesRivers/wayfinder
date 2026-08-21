@@ -285,7 +285,7 @@ flowchart TB
     end
 
     subgraph "K3s cluster"
-        AWX["AWX<br/>Project: adt"]
+        AWX["AWX<br/>Project: mon"]
         JT["Job Template:<br/>alloy-template"]
         INV["Inventory:<br/>alloy-inventory"]
     end
@@ -313,7 +313,7 @@ flowchart TB
 
 **Bare repository** — The Alloy bundle lives at `/tmp/git-repos/alloy-template-bundle.git`. This is the single source of truth for all Alloy playbooks and templates.
 
-**AWX project** — The AWX project named `adt` is configured with:
+**AWX project** — The AWX project named `mon` is configured with:
 - SCM URL: `git://172.16.47.163:9418/alloy-template-bundle.git`
 - Branch: `main`
 - SCM update on launch: **enabled** (every job run pulls the latest commit)
@@ -386,7 +386,7 @@ The bootstrap script (`scripts/bootstrap-awx-alloy.py` in this repo) creates or 
 python3 scripts/bootstrap-awx-alloy.py
 ```
 
-This ensures the `observability` organization, `adt` project, `alloy-inventory`, and `alloy-template` job template exist and are correctly wired.
+This ensures the `observability` organization, `mon` project, `alloy-inventory`, and `alloy-template` job template exist and are correctly wired.
 
 ---
 
@@ -402,7 +402,7 @@ This ensures the `observability` organization, `adt` project, `alloy-inventory`,
 
 | Name | SCM URL | Branch | Update on launch |
 |------|---------|--------|------------------|
-| adt  | git://172.16.47.163:9418/alloy-template-bundle.git | main | Yes |
+| mon  | git://172.16.47.163:9418/alloy-template-bundle.git | main | Yes |
 
 ### 7.3 Inventory: alloy-inventory
 

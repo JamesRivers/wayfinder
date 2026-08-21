@@ -7,7 +7,7 @@
 # What this does:
 #   1. Retrieves the AWX admin password from the K8s secret
 #   2. Creates or updates the 'observability' organisation
-#   3. Creates or updates the 'adt' project (pointing at the Alloy bare repo)
+#   3. Creates or updates the 'mon' project (pointing at the Alloy bare repo)
 #   4. Syncs the project to pull the latest bundle content
 #   5. Creates or updates the 'alloy-inventory' inventory
 #   6. Creates or updates the 'alloy-credential' machine credential
@@ -28,7 +28,7 @@ HOST_IP="${HOST_IP// /}"
 BARE_REPO="${ALLOY_BARE_REPO:-/tmp/git-repos/alloy-template-bundle.git}"
 GIT_URL="${ALLOY_GIT_URL:-git://${HOST_IP}:9418/alloy-template-bundle.git}"
 PLAYBOOK_OVERRIDE="${AWX_PLAYBOOK:-}"
-PROJECT_NAME="${AWX_PROJECT_NAME:-adt}"
+PROJECT_NAME="${AWX_PROJECT_NAME:-mon}"
 INVENTORY_NAME="${AWX_INVENTORY_NAME:-alloy-inventory}"
 TEMPLATE_NAME="${AWX_TEMPLATE_NAME:-alloy-template}"
 ORG_NAME="${AWX_ORG_NAME:-observability}"
