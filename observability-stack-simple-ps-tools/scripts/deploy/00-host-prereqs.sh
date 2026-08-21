@@ -69,7 +69,7 @@ step "Setting up deployment repo"
 
 DEPLOY_DIR="${INSTALL_HOME}/observability-stack"
 
-if [[ -d "${DEPLOY_DIR}/deploy" ]]; then
+if [[ -d "${DEPLOY_DIR}/deploy/k8s" ]]; then
     log "Deployment repo already exists at ${DEPLOY_DIR}"
 else
     REPO_URL="${DEPLOY_REPO_URL:-https://github.com/JamesRivers/wayfinder.git}"
