@@ -298,8 +298,8 @@ flowchart TB
     BR -->|"git://172.16.47.163:9418/<br/>alloy-template-bundle.git"| GD
     AWX -->|"git clone/pull<br/>on every job launch"| GD
     JT -->|"uses project + inventory"| AWX
-    AWX -->|"SSH: runs playbooks/<br/>alloy-deploy.yml"| T1
-    AWX -->|"SSH: runs playbooks/<br/>alloy-deploy.yml"| T2
+    AWX -->|"SSH: runs chosen playbook<br/>(e.g. playbooks/alloy_ubuntu.yml)"| T1
+    AWX -->|"SSH: runs chosen playbook<br/>(e.g. playbooks/alloy_ubuntu.yml)"| T2
 ```
 
 ### 6.2 The components
@@ -344,6 +344,38 @@ git push origin main
 ```
 
 The next AWX job launch will automatically pull the updated commit because `scm_update_on_launch` is enabled.
+
+### 6.3a Script-only bundle import when the source repo is `product-observavility`
+
+On monlog4 the bundle source may live in a git repo at `/home/imagine/product-observavility` rather than in `~/observability-stack/alloy-bundle`.
+In that case the bare repo used by AWX must be populated from the product repo before seeding AWX:
+
+```bash
+bash ~/observability-stack/scripts/deploy/06-setup-alloy-repo.sh \
+  ~/observability-stack \
+  /home/imagine/product-observavility
+
+bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
+```
+
+`05-seed-awx.sh` now also:
+- falls back to `sudo k3s kubectl` if the calling user cannot read the K3s kubeconfig directly
+- auto-detects the deployment playbook from `/tmp/git-repos/alloy-template-bundle.git`
+- prefers `playbooks/alloy_ubuntu.yml` when `playbooks/alloy-deploy.yml` is not present
+
+`06-setup-alloy-repo.sh` now supports this directly:
+- optional second arg = explicit bundle source path
+- default source = `REPO_DIR/alloy-bundle`
+- fallback sources = `~/product-observavility`, then `~/product-observability`
+- when the source is a git repo, it pushes the current HEAD into `/tmp/git-repos/alloy-template-bundle.git` as branch `main` and sets the bare repo HEAD to `main`
+
+Equivalent manual commands, if needed:
+
+```bash
+cd /home/imagine/product-observavility
+git push /tmp/git-repos/alloy-template-bundle.git HEAD:refs/heads/main
+git --git-dir=/tmp/git-repos/alloy-template-bundle.git symbolic-ref HEAD refs/heads/main
+```
 
 ### 6.4 Re-running the bootstrap script
 
@@ -407,7 +439,7 @@ loki_endpoint: http://172.16.47.163:3100
 
 ### 7.6 Job template: alloy-template
 
-- Playbook: `playbooks/alloy-deploy.yml`
+- Playbook: auto-detected from the bundle, typically `playbooks/alloy_ubuntu.yml` on monlog4
 - Prompts on launch: inventory, credentials, variables, limit
 - Extra vars: `{"confirm_run": "yes"}`
 

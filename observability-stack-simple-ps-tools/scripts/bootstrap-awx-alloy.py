@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-DEFAULT_AWX_URL = os.environ.get("AWX_URL", "http://172.16.47.163:30080")
+DEFAULT_AWX_URL = os.environ.get("AWX_URL", "http://localhost:30080")
 DEFAULT_AWX_ADMIN_USER = os.environ.get("AWX_ADMIN_USER", "admin")
 DEFAULT_AWX_ADMIN_PASSWORD_SECRET = os.environ.get(
     "AWX_ADMIN_PASSWORD_SECRET", "observability-awx-admin-password"
@@ -35,7 +35,7 @@ DEFAULT_BRANCH = os.environ.get("AWX_BRANCH", "main")
 DEFAULT_REPO = os.environ.get(
     "AWX_REPO_URL", "git://172.16.47.163:9418/alloy-template-bundle.git"
 )
-DEFAULT_PLAYBOOK = os.environ.get("AWX_PLAYBOOK", "playbooks/alloy-deploy.yml")
+DEFAULT_PLAYBOOK = os.environ.get("AWX_PLAYBOOK", "playbooks/alloy_ubuntu.yml")
 DEFAULT_MACHINE_CREDENTIAL = os.environ.get("AWX_MACHINE_CREDENTIAL_NAME", "local-linux-test")
 DEFAULT_CONFIRM_RUN = os.environ.get("AWX_CONFIRM_RUN", "yes")
 DEFAULT_SYNC = os.environ.get("AWX_SYNC_PROJECT", "true").lower() in {"1", "true", "yes", "on"}
@@ -46,9 +46,26 @@ def eprint(*args: Any) -> None:
     print(*args, file=sys.stderr)
 
 
+def kubectl_command(namespace: str) -> list[str]:
+    probes = [
+        ["kubectl", "get", "namespace", namespace],
+        ["sudo", "k3s", "kubectl", "get", "namespace", namespace],
+    ]
+
+    for probe in probes:
+        try:
+            subprocess.check_output(probe, stderr=subprocess.DEVNULL, text=True)
+            return probe[:-4]
+        except Exception:
+            continue
+
+    raise RuntimeError(
+        f"could not access namespace {namespace!r} via kubectl or sudo k3s kubectl"
+    )
+
+
 def get_awx_admin_password(secret_name: str, namespace: str) -> str:
-    cmd = [
-        "kubectl",
+    cmd = kubectl_command(namespace) + [
         "get",
         "secret",
         "-n",
