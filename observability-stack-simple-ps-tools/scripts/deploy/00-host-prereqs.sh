@@ -64,6 +64,32 @@ apt-get install -y -qq curl git jq > /dev/null
 
 log "curl, git, jq installed"
 
+# --- Clone deployment repo ----------------------------------------------------
+step "Setting up deployment repo"
+
+DEPLOY_DIR="${INSTALL_HOME}/observability-stack"
+
+if [[ -d "${DEPLOY_DIR}/deploy" ]]; then
+    log "Deployment repo already exists at ${DEPLOY_DIR}"
+else
+    if sudo -u "${INSTALL_USER}" git clone https://github.com/JamesRivers/wayfinder.git /tmp/wayfinder-clone 2>/dev/null; then
+        sudo -u "${INSTALL_USER}" mkdir -p "${DEPLOY_DIR}"
+        sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/* "${DEPLOY_DIR}/" 2>/dev/null || true
+        sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/.* "${DEPLOY_DIR}/" 2>/dev/null || true
+        rm -rf /tmp/wayfinder-clone
+        log "Repo cloned to ${DEPLOY_DIR}"
+    else
+        warn "Could not clone repo from GitHub"
+        echo "  Manually copy the repo to: ${DEPLOY_DIR}"
+        echo "  Required structure:"
+        echo "    ${DEPLOY_DIR}/deploy/k8s/storage/garage/"
+        echo "    ${DEPLOY_DIR}/deploy/k8s/observability/"
+        echo "    ${DEPLOY_DIR}/deploy/k8s/awx/"
+        echo "    ${DEPLOY_DIR}/deploy/k8s/ai/"
+        echo "    ${DEPLOY_DIR}/scripts/deploy/"
+    fi
+fi
+
 # --- Verification -------------------------------------------------------------
 step "Verification"
 
@@ -72,7 +98,10 @@ echo "  Sudo:    $(sudo -n -l -U ${INSTALL_USER} 2>&1 | tail -1)"
 echo "  curl:    $(curl --version | head -1)"
 echo "  git:     $(git --version)"
 echo "  jq:      $(jq --version)"
+echo "  Repo:    ${DEPLOY_DIR}"
 
 echo ""
 log "Host prerequisites complete"
-echo "  Next step: run 01-install-k3s.sh"
+echo "  Deploy directory: ${DEPLOY_DIR}"
+echo "  All scripts should be run as: bash ${DEPLOY_DIR}/scripts/deploy/<script>.sh"
+echo "  Next step: bash ${DEPLOY_DIR}/scripts/deploy/01-install-k3s.sh"
