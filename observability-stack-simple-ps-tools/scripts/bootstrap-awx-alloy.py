@@ -31,6 +31,7 @@ DEFAULT_ORG = os.environ.get("AWX_ORG_NAME", "observability")
 DEFAULT_PROJECT = os.environ.get("AWX_PROJECT_NAME", "mon")
 DEFAULT_INVENTORY = os.environ.get("AWX_INVENTORY_NAME", "alloy-inventory")
 DEFAULT_TEMPLATE = os.environ.get("AWX_TEMPLATE_NAME", "alloy-template")
+DEFAULT_TEMPLATE_TARGET = os.environ.get("AWX_TEMPLATE_TARGET", "all")
 DEFAULT_BRANCH = os.environ.get("AWX_BRANCH", "main")
 DEFAULT_REPO = os.environ.get(
     "AWX_REPO_URL", "git://172.16.47.163:9418/alloy-template-bundle.git"
@@ -175,6 +176,7 @@ def main() -> int:
     parser.add_argument("--project", default=DEFAULT_PROJECT)
     parser.add_argument("--inventory", default=DEFAULT_INVENTORY)
     parser.add_argument("--template", default=DEFAULT_TEMPLATE)
+    parser.add_argument("--template-target", default=DEFAULT_TEMPLATE_TARGET)
     parser.add_argument("--branch", default=DEFAULT_BRANCH)
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--playbook", default=DEFAULT_PLAYBOOK)
@@ -245,6 +247,10 @@ def main() -> int:
         changed = client.ensure_template_extra_vars(template["id"], "confirm_run", args.confirm_run)
         if changed:
             eprint(f"Set confirm_run={args.confirm_run!r} on job template {template['name']}")
+    if args.template_target:
+        changed = client.ensure_template_extra_vars(template["id"], "target", args.template_target)
+        if changed:
+            eprint(f"Set target={args.template_target!r} on job template {template['name']}")
 
     summary = {
         "organization": {"id": org["id"], "name": org["name"], "created_or_updated": created_org},

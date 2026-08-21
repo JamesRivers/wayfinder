@@ -33,6 +33,7 @@ INVENTORY_NAME="${AWX_INVENTORY_NAME:-alloy-inventory}"
 TEMPLATE_NAME="${AWX_TEMPLATE_NAME:-alloy-template}"
 ORG_NAME="${AWX_ORG_NAME:-observability}"
 CREDENTIAL_NAME="${AWX_CREDENTIAL_NAME:-alloy-credential}"
+TARGET_DEFAULT="${AWX_TEMPLATE_TARGET:-all}"
 
 # --- Colours ----------------------------------------------------------------
 RED='\033[0;31m'
@@ -250,7 +251,7 @@ JT_ID=$(awx_create_or_patch "/job_templates/" "${TEMPLATE_NAME}" "{
     \"ask_variables_on_launch\": true,
     \"ask_inventory_on_launch\": true,
     \"ask_credential_on_launch\": true,
-    \"extra_vars\": \"{\\\"confirm_run\\\": \\\"yes\\\"}\",
+    \"extra_vars\": \"{\\\"confirm_run\\\": \\\"yes\\\", \\\"target\\\": \\\"${TARGET_DEFAULT}\\\"}\",
     \"become_enabled\": true
 }")
 
@@ -305,4 +306,4 @@ echo ""
 echo "  To add a host:  Use AWX UI at http://${HOST_IP}:${AWX_PORT}"
 echo "                  or curl against ${AWX_URL}/hosts/"
 echo ""
-echo "  Next step: launch ${TEMPLATE_NAME} in AWX against the target limit you want"
+echo "  Next step: launch ${TEMPLATE_NAME} in AWX with a host or group limit; the template defaults target=all for legacy playbooks"
