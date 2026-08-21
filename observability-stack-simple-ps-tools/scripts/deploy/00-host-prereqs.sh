@@ -72,10 +72,18 @@ DEPLOY_DIR="${INSTALL_HOME}/observability-stack"
 if [[ -d "${DEPLOY_DIR}/deploy" ]]; then
     log "Deployment repo already exists at ${DEPLOY_DIR}"
 else
-    if sudo -u "${INSTALL_USER}" git clone https://github.com/JamesRivers/wayfinder.git /tmp/wayfinder-clone 2>/dev/null; then
+    REPO_URL="${DEPLOY_REPO_URL:-https://github.com/JamesRivers/wayfinder.git}"
+    REPO_BRANCH="${DEPLOY_REPO_BRANCH:-feat/observability-stack-foundation}"
+
+    if sudo -u "${INSTALL_USER}" git clone -b "${REPO_BRANCH}" "${REPO_URL}" /tmp/wayfinder-clone 2>/dev/null; then
         sudo -u "${INSTALL_USER}" mkdir -p "${DEPLOY_DIR}"
-        sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/* "${DEPLOY_DIR}/" 2>/dev/null || true
-        sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/.* "${DEPLOY_DIR}/" 2>/dev/null || true
+        if [[ -d /tmp/wayfinder-clone/observability-stack-simple-ps-tools ]]; then
+            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/* "${DEPLOY_DIR}/"
+            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/.[!.]* "${DEPLOY_DIR}/" 2>/dev/null || true
+        else
+            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/* "${DEPLOY_DIR}/"
+            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/.[!.]* "${DEPLOY_DIR}/" 2>/dev/null || true
+        fi
         rm -rf /tmp/wayfinder-clone
         log "Repo cloned to ${DEPLOY_DIR}"
     else
