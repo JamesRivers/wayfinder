@@ -18,10 +18,12 @@ A locked design for a K3s-based observability stack with Grafana, Mimir, Prometh
 - [AWX deployment for remote Alloy targets](tickets/03-awx-alloy-endpoint-template-model.md) — Deploy AWX in K3s as the basic control plane, then separately seed/import the Alloy bundle through a repeatable CLI-driven Ansible bootstrap so inventories, credentials, and job templates stay decoupled from the core install.
 - [External AI platform, MCP, and skills pack for RCA](tickets/04-ai-integration-for-grafana-and-topology-awareness.md) — Keep the AI outside the observability stack, give it read-only MCP access into Grafana and telemetry backends, and supply a skills pack with topology and RCA context.
 - [AWX template import workflow for Alloy bundle updates](tickets/05-awx-template-import-workflow-for-alloy-bundle-updates.md) — Use a repeatable command-line Ansible bootstrap against the host git mirror so current and future Alloy bundle templates import into AWX consistently after the basic AWX install.
+- [Alloy components and journal source deployment via AWX](tickets/06-alloy-components-and-journal-source-deployment.md) — Default alloy_components includes journal source; write endpoints default to Mimir/Loki ingress via role defaults; River template comments fixed; alloy user added to systemd-journal group.
 
 ## Not yet specified
 
-- How the full Alloy bundle template set should be refactored so that write endpoints, component defaults, and product-group mappings work out of the box for new targets without manual AWX variable setup — currently tracked as individual issues in ticket 06 but may expand.
+- How to validate the updated bundle end-to-end via AWX re-deploy on both test targets to confirm all fixes work from a clean AWX run (not just manual edits).
+- Whether other River templates in the bundle have the same semicolon / comment syntax issues that caused crash loops (may need a bulk audit).
 
 ## Out of scope
 

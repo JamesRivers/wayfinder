@@ -1,8 +1,8 @@
 title: Alloy components and journal source deployment via AWX
 label: wayfinder:grilling
-status: open
+status: closed
 blocked-by:
-assignee:
+assignee: Hermes
 
 ## Question
 
@@ -25,3 +25,24 @@ Decisions needed:
 - Neither host has journal logs flowing to Loki because no `loki.source.journal.generic.alloy` file was deployed.
 - The `alloy_version` variable was also missing from defaults and has now been added to the bundle (`defaults/main.yml`) as `1.18.1`.
 - The `unzip` package dependency was also missing and a task was added to `tasks/ubuntu.yml` to install it.
+
+## Resolution
+
+**Decision 1 — Default alloy_components for a basic Linux target:**
+Default `alloy_components` changed from `[]` to `["loki.source.journal.generic"]` in `defaults/main.yml`. The `alloy_components` list mechanism stays — AWX inventory groups override per target type.
+
+**Decision 2 — Write endpoints use Mimir/Loki ingress by default:**
+Yes. The `prometheus.remote_write` and `loki.write` templates already use `prometheus_endpoint` and `loki_endpoint` variables. New role defaults added to `defaults/main.yml`:
+- `mon_hub_address: "172.16.47.163"`
+- `prometheus_endpoint: "http://{{ mon_hub_address }}/mimir"` (Mimir ingress)
+- `loki_endpoint: "http://{{ mon_hub_address }}/loki"` (Loki ingress)
+Override at AWX inventory group or host level for different hubs.
+
+**Decision 3 — Where endpoints are defined:**
+Role defaults. Every new deploy gets the right URLs with zero AWX variable setup. Override at inventory group/host level for targets pointing at a different hub.
+
+**Additional fixes committed:**
+- `templates/alloy/loki.source.journal.generic.alloy.j2`: replaced `#` comments with `//` (River syntax) — the `#` characters caused parse errors that crash-looped Alloy on both test targets.
+- `tasks/ubuntu.yml`: added task to add alloy user to `systemd-journal` group so the journal tailer can read `/var/log/journal`.
+
+Commit: `c7f96b8` on `alloy-template-bundle.git` bare repo at `/tmp/git-repos/alloy-template-bundle.git` on monlog01.
