@@ -58,11 +58,27 @@ log "Namespace created"
 step "Deploying AWX Operator v2.19.1"
 echo "  Pulling operator from GitHub and container images..."
 
-# Apply the full kustomization — the AWX CR will fail because the CRD
-# isn't registered yet, but the operator and image overrides will apply.
-kubectl apply -k "${AWX_DEPLOY}" 2>&1 | while read -r line; do
+# Apply the full kustomization — the AWX CR may fail because the CRD
+# isn't registered yet, but the operator and image overrides should still apply.
+FIRST_APPLY_LOG=$(mktemp)
+if kubectl apply -k "${AWX_DEPLOY}" >"${FIRST_APPLY_LOG}" 2>&1; then
+    :
+else
+    if grep -q 'no matches for kind "AWX" in version "awx.ansible.com/v1beta1"' "${FIRST_APPLY_LOG}"; then
+        warn "Initial AWX CR apply failed before CRD registration; continuing"
+    else
+        cat "${FIRST_APPLY_LOG}" | while read -r line; do
+            echo "  ${line}"
+        done
+        rm -f "${FIRST_APPLY_LOG}"
+        err "AWX operator bootstrap failed before CRD registration"
+        exit 1
+    fi
+fi
+cat "${FIRST_APPLY_LOG}" | while read -r line; do
     echo "  ${line}"
 done
+rm -f "${FIRST_APPLY_LOG}"
 
 log "AWX Operator manifests applied (AWX CR may show an error above — that's expected)"
 
