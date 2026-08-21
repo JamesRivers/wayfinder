@@ -74,17 +74,19 @@ if [[ -d "${DEPLOY_DIR}/deploy/k8s" ]]; then
 else
     REPO_URL="${DEPLOY_REPO_URL:-https://github.com/JamesRivers/wayfinder.git}"
     REPO_BRANCH="${DEPLOY_REPO_BRANCH:-feat/observability-stack-foundation}"
+    CLONE_DIR="/tmp/wayfinder-clone-$$"
 
-    if sudo -u "${INSTALL_USER}" git clone -b "${REPO_BRANCH}" "${REPO_URL}" /tmp/wayfinder-clone 2>/dev/null; then
-        sudo -u "${INSTALL_USER}" mkdir -p "${DEPLOY_DIR}"
-        if [[ -d /tmp/wayfinder-clone/observability-stack-simple-ps-tools ]]; then
-            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/* "${DEPLOY_DIR}/"
-            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/observability-stack-simple-ps-tools/.[!.]* "${DEPLOY_DIR}/" 2>/dev/null || true
+    if git clone -b "${REPO_BRANCH}" "${REPO_URL}" "${CLONE_DIR}" 2>/dev/null; then
+        mkdir -p "${DEPLOY_DIR}"
+        if [[ -d "${CLONE_DIR}/observability-stack-simple-ps-tools" ]]; then
+            cp -r "${CLONE_DIR}/observability-stack-simple-ps-tools/"* "${DEPLOY_DIR}/"
+            cp -r "${CLONE_DIR}/observability-stack-simple-ps-tools/".[!.]* "${DEPLOY_DIR}/" 2>/dev/null || true
         else
-            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/* "${DEPLOY_DIR}/"
-            sudo -u "${INSTALL_USER}" cp -r /tmp/wayfinder-clone/.[!.]* "${DEPLOY_DIR}/" 2>/dev/null || true
+            cp -r "${CLONE_DIR}/"* "${DEPLOY_DIR}/"
+            cp -r "${CLONE_DIR}/".[!.]* "${DEPLOY_DIR}/" 2>/dev/null || true
         fi
-        rm -rf /tmp/wayfinder-clone
+        chown -R "${INSTALL_USER}:${INSTALL_USER}" "${DEPLOY_DIR}"
+        rm -rf "${CLONE_DIR}"
         log "Repo cloned to ${DEPLOY_DIR}"
     else
         warn "Could not clone repo from GitHub"
