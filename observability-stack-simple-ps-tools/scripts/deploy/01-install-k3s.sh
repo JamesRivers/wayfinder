@@ -88,14 +88,30 @@ log "kubectl configured at ${INSTALL_HOME}/.kube/config"
 step "Waiting for system pods (up to 180s)"
 
 for i in $(seq 1 36); do
+    TOTAL=$(kubectl get pods -A --no-headers 2>/dev/null | wc -l || true)
     NOT_READY=$(kubectl get pods -A --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | wc -l || true)
-    if [[ "${NOT_READY}" -eq 0 ]]; then
+    if [[ "${TOTAL}" -gt 0 && "${NOT_READY}" -eq 0 ]]; then
         log "All system pods are running"
         break
     fi
     if [[ $i -eq 36 ]]; then
         warn "Some pods still not ready after 180s — check manually"
         kubectl get pods -A 2>/dev/null
+        break
+    fi
+    sleep 5
+done
+
+# --- Wait for Traefik specifically -------------------------------------------
+step "Waiting for Traefik to be ready (up to 120s)"
+
+for i in $(seq 1 24); do
+    if kubectl get svc -n kube-system traefik &>/dev/null; then
+        log "Traefik service is available"
+        break
+    fi
+    if [[ $i -eq 24 ]]; then
+        warn "Traefik service not found after 120s — check manually"
         break
     fi
     sleep 5
