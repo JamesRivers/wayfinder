@@ -58,12 +58,13 @@ log "Namespace created"
 step "Deploying AWX Operator v2.19.1"
 echo "  Pulling operator from GitHub and container images..."
 
-# Apply the operator from the upstream kustomize ref
-kubectl apply -k "https://github.com/ansible/awx-operator/config/default?ref=2.19.1" 2>&1 | while read -r line; do
+# Apply the full kustomization — the AWX CR will fail because the CRD
+# isn't registered yet, but the operator and image overrides will apply.
+kubectl apply -k "${AWX_DEPLOY}" 2>&1 | while read -r line; do
     echo "  ${line}"
 done
 
-log "AWX Operator manifests applied"
+log "AWX Operator manifests applied (AWX CR may show an error above — that's expected)"
 
 # --- Wait for operator to be ready -------------------------------------------
 step "Waiting for AWX Operator to be ready (up to 180s)"
@@ -101,8 +102,10 @@ step "Deploying AWX instance '${AWX_INSTANCE}'"
 echo "  This creates postgres, runs migrations, and starts web + task pods."
 echo "  First deploy takes 5-10 minutes for image pulls."
 
-kubectl apply -f "${AWX_DEPLOY}/awx.yaml"
-kubectl apply -f "${AWX_DEPLOY}/ingress.yaml"
+# Re-apply the full kustomization — now the CRD is registered so the AWX CR will succeed
+kubectl apply -k "${AWX_DEPLOY}" 2>&1 | grep -v "unchanged" | while read -r line; do
+    echo "  ${line}"
+done
 
 log "AWX instance CR applied"
 
