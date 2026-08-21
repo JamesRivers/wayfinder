@@ -11,7 +11,7 @@ Stand up a single-node K3s cluster on the observability host so the platform ser
 
 ## Access path
 
-- Use the jump host chain only when needed for reachability: `ssh -J imagine@100.102.149.18 imagine@172.16.47.163`
+- Use the jump host chain only when needed for reachability: `ssh -J <user>@<jumphost> <user>@<host>`
 
 ## Installation posture
 

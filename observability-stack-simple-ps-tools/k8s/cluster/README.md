@@ -4,7 +4,7 @@ Notes for the single-node K3s observability host.
 
 Target host:
 - Target host: `172.16.47.163`
-- Access path if needed: `ssh -J imagine@100.102.149.18 imagine@172.16.47.163`
+- Access path if needed: `ssh -J <user>@<jumphost> <user>@<host>`
 
 Planned content:
 - installation prerequisites

@@ -27,7 +27,7 @@ DEFAULT_AWX_ADMIN_PASSWORD_SECRET = os.environ.get(
     "AWX_ADMIN_PASSWORD_SECRET", "observability-awx-admin-password"
 )
 DEFAULT_AWX_NAMESPACE = os.environ.get("AWX_NAMESPACE", "awx")
-DEFAULT_ORG = os.environ.get("AWX_ORG_NAME", "imagine")
+DEFAULT_ORG = os.environ.get("AWX_ORG_NAME", "observability")
 DEFAULT_PROJECT = os.environ.get("AWX_PROJECT_NAME", "mon")
 DEFAULT_INVENTORY = os.environ.get("AWX_INVENTORY_NAME", "alloy-inventory")
 DEFAULT_TEMPLATE = os.environ.get("AWX_TEMPLATE_NAME", "alloy-template")

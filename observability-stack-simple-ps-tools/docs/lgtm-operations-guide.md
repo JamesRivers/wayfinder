@@ -1,6 +1,6 @@
 # LGTM Observability Stack — Operations Guide
 
-This document is the complete reference for the Imagine Communications LGTM observability stack running on K3s. It covers the architecture, every component, how data flows through the system, and how to perform common operational tasks.
+This document is the complete reference for the LGTM observability stack running on K3s. It covers the architecture, every component, how data flows through the system, and how to perform common operational tasks.
 
 Host: **monlog01** (172.16.47.163) — Ubuntu 24.04 LTS, K3s v1.36.3+k3s1 single-node cluster.
 
@@ -333,8 +333,8 @@ cd alloy-template-bundle
 # e.g. edit templates/alloy/loki.source.journal.generic.alloy.j2
 
 # Commit
-git config user.email "imagine@imaginecommunications.com"
-git config user.name "Imagine"
+git config user.email "deploy@localhost"
+git config user.name "Deploy"
 git add -A
 git commit -m "Description of change"
 
@@ -354,7 +354,7 @@ The bootstrap script (`scripts/bootstrap-awx-alloy.py` in this repo) creates or 
 python3 scripts/bootstrap-awx-alloy.py
 ```
 
-This ensures the `imagine` organization, `adt` project, `alloy-inventory`, and `alloy-template` job template exist and are correctly wired.
+This ensures the `observability` organization, `adt` project, `alloy-inventory`, and `alloy-template` job template exist and are correctly wired.
 
 ---
 
@@ -364,7 +364,7 @@ This ensures the `imagine` organization, `adt` project, `alloy-inventory`, and `
 
 | Name    | ID |
 |---------|----|
-| imagine | 2  |
+| observability | 2  |
 
 ### 7.2 Project
 
@@ -565,8 +565,8 @@ In Grafana, go to **Explore** and select the **Loki** datasource.
 5. **Commit and push**:
 
    ```bash
-   git config user.email "imagine@imaginecommunications.com"
-   git config user.name "Imagine"
+   git config user.email "deploy@localhost"
+   git config user.name "Deploy"
    git add -A
    git commit -m "Add loki.source.file.myapp template"
    git remote set-url origin /tmp/git-repos/alloy-template-bundle.git
@@ -579,7 +579,7 @@ In Grafana, go to **Explore** and select the **Loki** datasource.
 
 ```bash
 # SSH to monlog01
-ssh imagine@172.16.47.163
+ssh <user>@<mon-host>
 
 # Node and pod status
 kubectl get nodes

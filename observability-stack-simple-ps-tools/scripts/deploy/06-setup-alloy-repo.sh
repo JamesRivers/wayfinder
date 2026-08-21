@@ -62,7 +62,7 @@ if [[ -d "${BUNDLE_SOURCE}" ]]; then
     WORK_DIR=$(mktemp -d)
     cd "${WORK_DIR}"
     git init
-    git config user.email "deploy@imagine.io"
+    git config user.email "deploy@localhost"
     git config user.name "Deploy Script"
     cp -r "${BUNDLE_SOURCE}"/* . 2>/dev/null || true
     cp -r "${BUNDLE_SOURCE}"/.[!.]* . 2>/dev/null || true

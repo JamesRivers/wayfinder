@@ -6,7 +6,7 @@
 #
 # What this does:
 #   1. Retrieves the AWX admin password from K8s secret
-#   2. Creates/updates the 'imagine' organisation
+#   2. Creates/updates the 'observability' organisation
 #   3. Creates/updates the 'adt' project (pointing at the Alloy bare repo)
 #   4. Creates/updates the 'alloy-inventory' inventory
 #   5. Creates/updates the 'alloy-credential' machine credential
@@ -100,10 +100,10 @@ fi
 log "AWX API responding, admin password retrieved"
 
 # --- Organisation -------------------------------------------------------------
-step "Creating organisation 'imagine'"
+step "Creating organisation 'observability'"
 
-ORG_ID=$(awx_find_or_create "/organizations/" "imagine" '{"name":"imagine","description":"Imagine Communications"}')
-log "Organisation: imagine (id: ${ORG_ID})"
+ORG_ID=$(awx_find_or_create "/organizations/" "observability" '{"name":"observability","description":"Observability Platform"}')
+log "Organisation: observability (id: ${ORG_ID})"
 
 # --- Project ------------------------------------------------------------------
 step "Creating project 'adt'"
@@ -235,7 +235,7 @@ step "Verification"
 
 echo ""
 echo "AWX Objects:"
-echo "  Organisation:  imagine (${ORG_ID})"
+echo "  Organisation:  observability (${ORG_ID})"
 echo "  Project:       adt (${PROJECT_ID})"
 echo "  Inventory:     alloy-inventory (${INV_ID})"
 echo "  Credential:    alloy-credential (${CRED_ID})"
