@@ -85,6 +85,20 @@ else
     log "Bare repo initialised"
 fi
 
+REPO_OWNER="$(stat -c '%U' "${BARE_REPO}" 2>/dev/null || echo unknown)"
+if [[ "${REPO_OWNER}" != "$(whoami)" ]]; then
+    warn "Bare repo is owned by ${REPO_OWNER}, current user is $(whoami)"
+    if command -v sudo >/dev/null 2>&1; then
+        sudo chown -R "$(whoami)":"$(id -gn)" "${BARE_REPO}"
+        log "Bare repo ownership changed to $(whoami)"
+    else
+        git config --global --add safe.directory "${BARE_REPO}"
+        warn "Added ${BARE_REPO} to git safe.directory"
+    fi
+fi
+
+git config --global --add safe.directory "${BARE_REPO}" >/dev/null 2>&1 || true
+
 # --- Populate from bundle source if available ---------------------------------
 step "Populating bare repo"
 
