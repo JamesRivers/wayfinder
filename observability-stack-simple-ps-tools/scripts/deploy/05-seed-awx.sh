@@ -11,7 +11,7 @@
 #   4. Syncs the project to pull the latest bundle content
 #   5. Creates or updates the 'alloy-inventory' inventory
 #   6. Creates or updates the 'alloy-credential' machine credential
-#   7. Creates or updates the 'alloy-template' job template
+#   7. Creates or updates separate Linux and Windows AWX job templates
 #   8. Creates inventory groups from playbooks/vars/alloy.yml and bundle overlays
 #
 # Prerequisites: AWX running (04-deploy-awx.sh), Alloy repo (06-setup-alloy-repo.sh)
@@ -27,13 +27,16 @@ HOST_IP="${HOST_IP:-$(hostname -I | awk '{print $1}') }"
 HOST_IP="${HOST_IP// /}"
 BARE_REPO="${ALLOY_BARE_REPO:-/tmp/git-repos/alloy-template-bundle.git}"
 GIT_URL="${ALLOY_GIT_URL:-git://${HOST_IP}:9418/alloy-template-bundle.git}"
-PLAYBOOK_OVERRIDE="${AWX_PLAYBOOK:-}"
+LEGACY_PLAYBOOK_OVERRIDE="${AWX_PLAYBOOK:-}"
 PROJECT_NAME="${AWX_PROJECT_NAME:-mon}"
 INVENTORY_NAME="${AWX_INVENTORY_NAME:-alloy-inventory}"
-TEMPLATE_NAME="${AWX_TEMPLATE_NAME:-alloy-template}"
+LINUX_TEMPLATE_NAME="${AWX_LINUX_TEMPLATE_NAME:-${AWX_TEMPLATE_NAME:-alloy-template-linux}}"
+WINDOWS_TEMPLATE_NAME="${AWX_WINDOWS_TEMPLATE_NAME:-alloy-template-windows}"
 ORG_NAME="${AWX_ORG_NAME:-observability}"
 CREDENTIAL_NAME="${AWX_CREDENTIAL_NAME:-alloy-credential}"
 TARGET_DEFAULT="${AWX_TEMPLATE_TARGET:-all}"
+LINUX_PLAYBOOK_OVERRIDE="${AWX_LINUX_PLAYBOOK:-${LEGACY_PLAYBOOK_OVERRIDE}}"
+WINDOWS_PLAYBOOK_OVERRIDE="${AWX_WINDOWS_PLAYBOOK:-}"
 
 # --- Colours ----------------------------------------------------------------
 RED='\033[0;31m'
@@ -63,38 +66,49 @@ kcmd() {
 }
 
 # --- Playbook resolution -----------------------------------------------------
-resolve_playbook() {
-    if [[ -n "${PLAYBOOK_OVERRIDE}" ]]; then
-        echo "${PLAYBOOK_OVERRIDE}"
+repo_has_playbook() {
+    local playbook_path="$1"
+    [[ -d "${BARE_REPO}" ]] || return 1
+    git --git-dir="${BARE_REPO}" show-ref --verify --quiet refs/heads/main || return 1
+    git --git-dir="${BARE_REPO}" cat-file -e "refs/heads/main:${playbook_path}" 2>/dev/null
+}
+
+resolve_linux_playbook() {
+    if [[ -n "${LINUX_PLAYBOOK_OVERRIDE}" ]]; then
+        echo "${LINUX_PLAYBOOK_OVERRIDE}"
         return 0
     fi
 
-    if [[ -d "${BARE_REPO}" ]]; then
-        if git --git-dir="${BARE_REPO}" show-ref --verify --quiet refs/heads/main; then
-            if git --git-dir="${BARE_REPO}" cat-file -e refs/heads/main:playbooks/alloy-deploy.yml 2>/dev/null; then
-                echo "playbooks/alloy-deploy.yml"
-                return 0
-            fi
-            if git --git-dir="${BARE_REPO}" cat-file -e refs/heads/main:playbooks/alloy_ubuntu.yml 2>/dev/null; then
-                echo "playbooks/alloy_ubuntu.yml"
-                return 0
-            fi
-            if git --git-dir="${BARE_REPO}" cat-file -e refs/heads/main:playbooks/alloy_windows.yml 2>/dev/null; then
-                echo "playbooks/alloy_windows.yml"
-                return 0
-            fi
-            if git --git-dir="${BARE_REPO}" cat-file -e refs/heads/main:playbooks/alloy_docker.yml 2>/dev/null; then
-                echo "playbooks/alloy_docker.yml"
-                return 0
-            fi
+    for candidate in \
+        playbooks/alloy_ubuntu.yml \
+        playbooks/alloy-deploy.yml
+    do
+        if repo_has_playbook "${candidate}"; then
+            echo "${candidate}"
+            return 0
         fi
-    fi
+    done
 
-    err "Could not resolve an AWX playbook from ${BARE_REPO}. Set AWX_PLAYBOOK explicitly."
+    err "Could not resolve a Linux AWX playbook from ${BARE_REPO}. Set AWX_LINUX_PLAYBOOK explicitly."
     return 1
 }
 
-PLAYBOOK_PATH="$(resolve_playbook)"
+resolve_windows_playbook() {
+    if [[ -n "${WINDOWS_PLAYBOOK_OVERRIDE}" ]]; then
+        echo "${WINDOWS_PLAYBOOK_OVERRIDE}"
+        return 0
+    fi
+
+    if repo_has_playbook "playbooks/alloy_windows.yml"; then
+        echo "playbooks/alloy_windows.yml"
+        return 0
+    fi
+
+    return 1
+}
+
+LINUX_PLAYBOOK_PATH="$(resolve_linux_playbook)"
+WINDOWS_PLAYBOOK_PATH="$(resolve_windows_playbook || true)"
 
 # --- AWX API helpers ---------------------------------------------------------
 awx_get() {
@@ -328,6 +342,7 @@ for product in components_by_product.keys():
     ordered_candidates.append(product)
 
 group_map = collections.OrderedDict()
+resolved_windows_groups = {resolve_group_name(alias) for alias in windows_groups}
 for product in ordered_candidates:
     if product in group_map:
         continue
@@ -350,6 +365,14 @@ for product in ordered_candidates:
         vars_lines.append(f"product: {product}")
 
     vars_lines.append("# source: playbooks/vars/alloy.yml")
+    if product in resolved_windows_groups:
+        vars_lines.extend([
+            "ansible_connection: winrm",
+            "ansible_port: 5985",
+            "ansible_ssh_port: 5985",
+            "ansible_winrm_transport: ntlm",
+            "ansible_winrm_server_cert_validation: ignore",
+        ])
     vars_lines.extend(yaml_list_block("alloy_components_from_product", base_components))
     if extra_keys:
         vars_lines.extend(yaml_list_block("alloy_component_extras_resolved_from", extra_keys))
@@ -469,25 +492,48 @@ CRED_ID=$(awx_create_or_patch "/credentials/" "${CREDENTIAL_NAME}" "{
 log "Credential: ${CREDENTIAL_NAME} (id: ${CRED_ID})"
 
 # --- Job template -----------------------------------------------------------
-step "Creating or updating job template '${TEMPLATE_NAME}'"
+create_job_template() {
+    local template_name="$1"
+    local description="$2"
+    local playbook_path="$3"
+    local become_enabled="$4"
+    local attach_default_credential="$5"
 
-JT_ID=$(awx_create_or_patch "/job_templates/" "${TEMPLATE_NAME}" "{
-    \"name\": \"${TEMPLATE_NAME}\",
-    \"description\": \"Deploy Alloy to targets\",
-    \"organization\": ${ORG_ID},
-    \"project\": ${PROJECT_ID},
-    \"inventory\": ${INV_ID},
-    \"playbook\": \"${PLAYBOOK_PATH}\",
-    \"ask_limit_on_launch\": true,
-    \"ask_variables_on_launch\": true,
-    \"ask_inventory_on_launch\": true,
-    \"ask_credential_on_launch\": true,
-    \"extra_vars\": \"{\\\"confirm_run\\\": \\\"yes\\\", \\\"target\\\": \\\"${TARGET_DEFAULT}\\\"}\",
-    \"become_enabled\": true
-}")
+    local jt_id
+    jt_id=$(awx_create_or_patch "/job_templates/" "${template_name}" "{
+        \"name\": \"${template_name}\",
+        \"description\": \"${description}\",
+        \"organization\": ${ORG_ID},
+        \"project\": ${PROJECT_ID},
+        \"inventory\": ${INV_ID},
+        \"playbook\": \"${playbook_path}\",
+        \"ask_limit_on_launch\": true,
+        \"ask_variables_on_launch\": true,
+        \"ask_inventory_on_launch\": true,
+        \"ask_credential_on_launch\": true,
+        \"extra_vars\": \"{\\\"confirm_run\\\": \\\"yes\\\", \\\"target\\\": \\\"${TARGET_DEFAULT}\\\"}\",
+        \"become_enabled\": ${become_enabled}
+    }")
 
-awx_post "/job_templates/${JT_ID}/credentials/" "{\"id\": ${CRED_ID}}" > /dev/null 2>&1 || true
-log "Job template: ${TEMPLATE_NAME} (id: ${JT_ID})"
+    if [[ "${attach_default_credential}" == "true" ]]; then
+        awx_post "/job_templates/${jt_id}/credentials/" "{\"id\": ${CRED_ID}}" > /dev/null 2>&1 || true
+    fi
+
+    echo "${jt_id}"
+}
+
+step "Creating or updating Linux job template '${LINUX_TEMPLATE_NAME}'"
+LINUX_JT_ID="$(create_job_template "${LINUX_TEMPLATE_NAME}" "Deploy Alloy to Linux targets" "${LINUX_PLAYBOOK_PATH}" true true)"
+log "Linux job template: ${LINUX_TEMPLATE_NAME} (id: ${LINUX_JT_ID})"
+
+WINDOWS_JT_ID=""
+if [[ -n "${WINDOWS_PLAYBOOK_PATH}" ]]; then
+    step "Creating or updating Windows job template '${WINDOWS_TEMPLATE_NAME}'"
+    WINDOWS_JT_ID="$(create_job_template "${WINDOWS_TEMPLATE_NAME}" "Deploy Alloy to Windows targets" "${WINDOWS_PLAYBOOK_PATH}" false false)"
+    log "Windows job template: ${WINDOWS_TEMPLATE_NAME} (id: ${WINDOWS_JT_ID})"
+else
+    warn "No Windows playbook found in ${BARE_REPO}; skipping Windows job template creation"
+fi
 
 # --- Inventory groups -------------------------------------------------------
 step "Creating inventory groups"
@@ -539,8 +585,12 @@ echo "  Organisation:  ${ORG_NAME} (${ORG_ID})"
 echo "  Project:       ${PROJECT_NAME} (${PROJECT_ID})"
 echo "  Inventory:     ${INVENTORY_NAME} (${INV_ID})"
 echo "  Credential:    ${CREDENTIAL_NAME} (${CRED_ID})"
-echo "  Job Template:  ${TEMPLATE_NAME} (${JT_ID})"
-echo "  Playbook:      ${PLAYBOOK_PATH}"
+echo "  Linux Template:   ${LINUX_TEMPLATE_NAME} (${LINUX_JT_ID})"
+echo "  Linux Playbook:   ${LINUX_PLAYBOOK_PATH}"
+if [[ -n "${WINDOWS_JT_ID}" ]]; then
+    echo "  Windows Template: ${WINDOWS_TEMPLATE_NAME} (${WINDOWS_JT_ID})"
+    echo "  Windows Playbook: ${WINDOWS_PLAYBOOK_PATH}"
+fi
 
 echo ""
 echo "Groups:"
@@ -556,4 +606,4 @@ echo ""
 echo "  To add a host:  Use AWX UI at http://${HOST_IP}:${AWX_PORT}"
 echo "                  or curl against ${AWX_URL}/hosts/"
 echo ""
-echo "  Next step: launch ${TEMPLATE_NAME} in AWX with a host or group limit; the template defaults target=all for legacy playbooks"
+echo "  Next step: launch ${LINUX_TEMPLATE_NAME} for Linux targets or ${WINDOWS_TEMPLATE_NAME} for Windows targets; templates default target=all for legacy playbooks"

@@ -30,13 +30,15 @@ DEFAULT_AWX_NAMESPACE = os.environ.get("AWX_NAMESPACE", "awx")
 DEFAULT_ORG = os.environ.get("AWX_ORG_NAME", "observability")
 DEFAULT_PROJECT = os.environ.get("AWX_PROJECT_NAME", "mon")
 DEFAULT_INVENTORY = os.environ.get("AWX_INVENTORY_NAME", "alloy-inventory")
-DEFAULT_TEMPLATE = os.environ.get("AWX_TEMPLATE_NAME", "alloy-template")
+DEFAULT_TEMPLATE = os.environ.get("AWX_TEMPLATE_NAME", "alloy-template-linux")
+DEFAULT_WINDOWS_TEMPLATE = os.environ.get("AWX_WINDOWS_TEMPLATE_NAME", "alloy-template-windows")
 DEFAULT_TEMPLATE_TARGET = os.environ.get("AWX_TEMPLATE_TARGET", "all")
 DEFAULT_BRANCH = os.environ.get("AWX_BRANCH", "main")
 DEFAULT_REPO = os.environ.get(
     "AWX_REPO_URL", "git://172.16.47.163:9418/alloy-template-bundle.git"
 )
 DEFAULT_PLAYBOOK = os.environ.get("AWX_PLAYBOOK", "playbooks/alloy_ubuntu.yml")
+DEFAULT_WINDOWS_PLAYBOOK = os.environ.get("AWX_WINDOWS_PLAYBOOK", "playbooks/alloy_windows.yml")
 DEFAULT_MACHINE_CREDENTIAL = os.environ.get("AWX_MACHINE_CREDENTIAL_NAME", "local-linux-test")
 DEFAULT_CONFIRM_RUN = os.environ.get("AWX_CONFIRM_RUN", "yes")
 DEFAULT_SYNC = os.environ.get("AWX_SYNC_PROJECT", "true").lower() in {"1", "true", "yes", "on"}
@@ -176,10 +178,12 @@ def main() -> int:
     parser.add_argument("--project", default=DEFAULT_PROJECT)
     parser.add_argument("--inventory", default=DEFAULT_INVENTORY)
     parser.add_argument("--template", default=DEFAULT_TEMPLATE)
+    parser.add_argument("--windows-template", default=DEFAULT_WINDOWS_TEMPLATE)
     parser.add_argument("--template-target", default=DEFAULT_TEMPLATE_TARGET)
     parser.add_argument("--branch", default=DEFAULT_BRANCH)
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--playbook", default=DEFAULT_PLAYBOOK)
+    parser.add_argument("--windows-playbook", default=DEFAULT_WINDOWS_PLAYBOOK)
     parser.add_argument("--machine-credential", default=DEFAULT_MACHINE_CREDENTIAL)
     parser.add_argument("--confirm-run", default=DEFAULT_CONFIRM_RUN)
     parser.add_argument("--sync-project", action=argparse.BooleanOptionalAction, default=DEFAULT_SYNC)
@@ -232,8 +236,27 @@ def main() -> int:
             "ask_credential_on_launch": True,
             "ask_variables_on_launch": True,
             "ask_limit_on_launch": True,
+            "become_enabled": True,
         },
-        update_fields=["inventory", "project", "playbook", "verbosity", "ask_inventory_on_launch", "ask_credential_on_launch", "ask_variables_on_launch", "ask_limit_on_launch"],
+        update_fields=["inventory", "project", "playbook", "verbosity", "ask_inventory_on_launch", "ask_credential_on_launch", "ask_variables_on_launch", "ask_limit_on_launch", "become_enabled"],
+    )
+    windows_template, created_windows_template = client.ensure_object(
+        "/api/v2/job_templates/",
+        args.windows_template,
+        {
+            "name": args.windows_template,
+            "job_type": "run",
+            "inventory": inventory["id"],
+            "project": project["id"],
+            "playbook": args.windows_playbook,
+            "verbosity": 1,
+            "ask_inventory_on_launch": True,
+            "ask_credential_on_launch": True,
+            "ask_variables_on_launch": True,
+            "ask_limit_on_launch": True,
+            "become_enabled": False,
+        },
+        update_fields=["inventory", "project", "playbook", "verbosity", "ask_inventory_on_launch", "ask_credential_on_launch", "ask_variables_on_launch", "ask_limit_on_launch", "become_enabled"],
     )
 
     if args.machine_credential:
@@ -247,16 +270,23 @@ def main() -> int:
         changed = client.ensure_template_extra_vars(template["id"], "confirm_run", args.confirm_run)
         if changed:
             eprint(f"Set confirm_run={args.confirm_run!r} on job template {template['name']}")
+        changed = client.ensure_template_extra_vars(windows_template["id"], "confirm_run", args.confirm_run)
+        if changed:
+            eprint(f"Set confirm_run={args.confirm_run!r} on job template {windows_template['name']}")
     if args.template_target:
         changed = client.ensure_template_extra_vars(template["id"], "target", args.template_target)
         if changed:
             eprint(f"Set target={args.template_target!r} on job template {template['name']}")
+        changed = client.ensure_template_extra_vars(windows_template["id"], "target", args.template_target)
+        if changed:
+            eprint(f"Set target={args.template_target!r} on job template {windows_template['name']}")
 
     summary = {
         "organization": {"id": org["id"], "name": org["name"], "created_or_updated": created_org},
         "project": {"id": project["id"], "name": project["name"], "created_or_updated": created_project},
         "inventory": {"id": inventory["id"], "name": inventory["name"], "created_or_updated": created_inventory},
-        "job_template": {"id": template["id"], "name": template["name"], "created_or_updated": created_template},
+        "job_template_linux": {"id": template["id"], "name": template["name"], "created_or_updated": created_template},
+        "job_template_windows": {"id": windows_template["id"], "name": windows_template["name"], "created_or_updated": created_windows_template},
     }
 
     if args.sync_project:
