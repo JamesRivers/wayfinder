@@ -12,7 +12,7 @@
 #   5. Creates or updates the 'alloy-inventory' inventory
 #   6. Creates or updates the 'alloy-credential' machine credential
 #   7. Creates or updates the 'alloy-template' job template
-#   8. Creates inventory groups for known products
+#   8. Creates inventory groups from bundle group_vars templates
 #
 # Prerequisites: AWX running (04-deploy-awx.sh), Alloy repo (06-setup-alloy-repo.sh)
 # ==============================================================================
@@ -141,6 +141,75 @@ awx_create_or_patch() {
     fi
 }
 
+decode_b64() {
+    python3 -c 'import base64,sys; print(base64.b64decode(sys.argv[1]).decode())' "$1"
+}
+
+discover_inventory_groups() {
+    if [[ ! -d "${BARE_REPO}" ]]; then
+        err "Bare repo not found at ${BARE_REPO}"
+        return 1
+    fi
+
+    if ! git --git-dir="${BARE_REPO}" show-ref --verify --quiet refs/heads/main; then
+        err "Bare repo ${BARE_REPO} has no main branch to inspect for group_vars"
+        return 1
+    fi
+
+    python3 - "${BARE_REPO}" <<'PY'
+import base64
+import collections
+import os
+import re
+import subprocess
+import sys
+
+bare_repo = sys.argv[1]
+treeish = "refs/heads/main"
+
+files = subprocess.check_output(
+    ["git", f"--git-dir={bare_repo}", "ls-tree", "-r", "--name-only", treeish, "playbooks/templates/alloy/group_vars"],
+    text=True,
+).splitlines()
+
+group_map = collections.OrderedDict()
+
+for path in files:
+    base = os.path.basename(path)
+    if not base.endswith(".yml.j2"):
+        continue
+    if base.startswith('.'):
+        continue
+
+    raw = subprocess.check_output(
+        ["git", f"--git-dir={bare_repo}", "show", f"{treeish}:{path}"],
+        text=True,
+    )
+
+    product = None
+    for line in raw.splitlines():
+        match = re.match(r"\s*product:\s*(.+?)\s*$", line)
+        if match:
+            product = match.group(1).strip().strip("\"'")
+            break
+
+    if not product:
+        continue
+
+    item = group_map.setdefault(product, {"sources": [], "parts": []})
+    item["sources"].append(base)
+    item["parts"].append(f"# source: {base}\n{raw.rstrip()}\n")
+
+for product, item in group_map.items():
+    merged = "\n".join(item["parts"]).rstrip() + "\n"
+    print("\t".join([
+        base64.b64encode(product.encode()).decode(),
+        base64.b64encode(merged.encode()).decode(),
+        base64.b64encode(", ".join(item["sources"]).encode()).decode(),
+    ]))
+PY
+}
+
 # --- Pre-flight checks -------------------------------------------------------
 step "Pre-flight checks"
 
@@ -261,22 +330,41 @@ log "Job template: ${TEMPLATE_NAME} (id: ${JT_ID})"
 # --- Inventory groups -------------------------------------------------------
 step "Creating inventory groups"
 
-INVENTORY_GROUPS=("basic" "xvr" "iox" "adt_core" "adt_haproxy" "adt_postgres" "adt_rabbitmq" \
-        "win_basic" "adcserver" "adcclient" "adcservices" "versio" "nexio" "motion" \
-        "docker_fullstack" "docker_basic")
+GROUP_DISCOVERY_OUTPUT="$(discover_inventory_groups)"
 
-for GROUP in "${INVENTORY_GROUPS[@]}"; do
+if [[ -z "${GROUP_DISCOVERY_OUTPUT}" ]]; then
+    err "No inventory groups could be discovered from playbooks/templates/alloy/group_vars in ${BARE_REPO}"
+    exit 1
+fi
+
+while IFS=$'\t' read -r GROUP_B64 VARS_B64 SOURCES_B64; do
+    [[ -z "${GROUP_B64:-}" ]] && continue
+
+    GROUP="$(decode_b64 "${GROUP_B64}")"
+    GROUP_VARS="$(decode_b64 "${VARS_B64}")"
+    GROUP_SOURCES="$(decode_b64 "${SOURCES_B64}")"
+    GROUP_PAYLOAD="$(GROUP_VARS_INPUT="${GROUP_VARS}" python3 - "${GROUP}" "${INV_ID}" <<'PY'
+import json
+import os
+import sys
+
+group, inventory_id = sys.argv[1:3]
+variables = os.environ.get("GROUP_VARS_INPUT", "")
+print(json.dumps({"name": group, "inventory": int(inventory_id), "variables": variables}))
+PY
+)"
+
     EXISTING_ID="$(awx_find_group "${INV_ID}" "${GROUP}")"
 
     if [[ -n "${EXISTING_ID}" ]]; then
         GRP_ID="${EXISTING_ID}"
-        echo "  ${GROUP} (id: ${GRP_ID}) — exists"
-        awx_patch "/groups/${GRP_ID}/" "{\"variables\": \"product: ${GROUP}\"}" > /dev/null 2>&1
+        awx_patch "/groups/${GRP_ID}/" "${GROUP_PAYLOAD}" > /dev/null 2>&1
+        echo "  ${GROUP} (id: ${GRP_ID}) — updated from ${GROUP_SOURCES}"
     else
-        GRP_ID=$(awx_post "/groups/" "{\"name\": \"${GROUP}\", \"inventory\": ${INV_ID}, \"variables\": \"product: ${GROUP}\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
-        echo "  ${GROUP} (id: ${GRP_ID})"
+        GRP_ID=$(awx_post "/groups/" "${GROUP_PAYLOAD}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+        echo "  ${GROUP} (id: ${GRP_ID}) — created from ${GROUP_SOURCES}"
     fi
-done
+done <<< "${GROUP_DISCOVERY_OUTPUT}"
 
 log "Inventory groups created"
 
