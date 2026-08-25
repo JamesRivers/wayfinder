@@ -21,6 +21,10 @@ Current bootstrap path:
 - When the bundle source is itself a git repo, `06-setup-alloy-repo.sh` pushes its current HEAD into `/tmp/git-repos/alloy-template-bundle.git` as branch `main` and sets the bare repo HEAD to `main`.
 - `scripts/deploy/05-seed-awx.sh` now auto-detects the deployment playbook from `/tmp/git-repos/alloy-template-bundle.git` and prefers `playbooks/alloy_ubuntu.yml` when `playbooks/alloy-deploy.yml` is absent.
 - `scripts/deploy/05-seed-awx.sh` falls back to `sudo k3s kubectl` when the calling user cannot read the K3s kubeconfig directly.
+- `scripts/deploy/05-seed-awx.sh` now creates AWX inventory groups from `playbooks/vars/alloy.yml` in the published bundle, not from the old fixed list.
+- Matching `playbooks/templates/alloy/group_vars/*.yml.j2` files are treated as overlays on top of the `alloy.yml` product model.
+- AWX group Variables now include both selector inputs and resolved detail from `alloy.yml`, such as `alloy_components_from_product`, `alloy_components_from_extra_set`, `alloy_components_resolved`, and `compose_file` where applicable.
+- Repeated overlay contributors for the same product are merged into one AWX group instead of one file silently replacing another.
 
 Recommended script-only import flow when using the git-backed product repo:
 
@@ -31,6 +35,10 @@ bash ~/observability-stack/scripts/deploy/06-setup-alloy-repo.sh \
 
 bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
 ```
+
+Example result after seeding:
+- the `sdno` AWX group is created automatically from the `components_by_product` model in `playbooks/vars/alloy.yml`
+- the AWX Variables view for `sdno` shows resolved entries like `loki.source.syslog.magellan` instead of only a thin selector such as `product: sdno`
 
 AWX items covered today:
 - Confirmed the AWX project `mon` syncs from the local git mirror and updated it to revision `2ec6bd2`.

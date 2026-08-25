@@ -383,6 +383,10 @@ bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
 - falls back to `sudo k3s kubectl` if the calling user cannot read the K3s kubeconfig directly
 - auto-detects the deployment playbook from `/tmp/git-repos/alloy-template-bundle.git`
 - prefers `playbooks/alloy_ubuntu.yml` when `playbooks/alloy-deploy.yml` is not present
+- creates AWX inventory groups from `playbooks/vars/alloy.yml` in the published bundle instead of using the old hardcoded starter list
+- treats `playbooks/templates/alloy/group_vars/*.yml.j2` as overlays on top of the `alloy.yml` product model
+- merges repeated overlay contributors for the same product into one AWX group instead of replacing earlier inputs
+- writes resolved component detail into AWX group Variables so the UI shows more than thin selectors
 
 `06-setup-alloy-repo.sh` now supports this directly:
 - optional second arg = explicit bundle source path
@@ -462,23 +466,39 @@ loki_endpoint: http://172.16.47.163:3100
 
 - Playbook: auto-detected from the bundle, typically `playbooks/alloy_ubuntu.yml` on monlog4
 - Prompts on launch: inventory, credentials, variables, limit
-- Extra vars: `{"confirm_run": "yes"}`
+- Extra vars: `{"confirm_run": "yes", "target": "all"}`
 
 ### 7.7 Inventory groups
 
-Groups define product types. Each group maps to a set of `alloy_components` that determines which Alloy config templates are deployed. Key groups:
+Groups define product types. The current seed flow builds them from the real product model in `playbooks/vars/alloy.yml`, then overlays any matching `playbooks/templates/alloy/group_vars/*.yml.j2` file content onto the same AWX group.
+
+Each AWX group Variables page now shows both the selector inputs and resolved product detail, for example:
+- `product`
+- `alloy_component_extras`
+- `alloy_components_from_product`
+- `alloy_component_extras_resolved_from`
+- `alloy_components_from_extra_set`
+- `alloy_components_resolved`
+- `compose_file` for docker-style products
+
+Example: the `sdno` group is created automatically from `components_by_product` in `playbooks/vars/alloy.yml`, and its AWX Variables include resolved entries such as `loki.source.syslog.magellan` and `prometheus.exporter.snmp.sdno`.
+
+Representative groups:
 
 | Group               | Purpose                                    |
 |---------------------|--------------------------------------------|
 | basic               | Minimal Linux: node exporter + self-monitoring |
 | adcserver           | ADC Server endpoints                       |
+| sdno                | SDNO-specific Windows/syslog/SNMP component set |
 | nexio               | Nexio server endpoints                     |
 | motion              | Motion endpoints                           |
 | creationstation     | Creation Station endpoints                 |
 | docker_basic        | Docker host with basic monitoring          |
 | docker_fullstack    | Full Docker monitoring stack               |
+| docker_snmp_exporter| SNMP exporter deployment                   |
+| docker_vsphere_exporter | vSphere exporter deployment            |
 | iox                 | IOX storage endpoints                      |
-| mon_core            | Monitoring infrastructure itself           |
+| alloy               | Generic Alloy product group from `alloy.yml` |
 
 ---
 
