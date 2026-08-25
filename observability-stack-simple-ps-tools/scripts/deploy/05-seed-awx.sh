@@ -12,7 +12,7 @@
 #   5. Creates or updates the 'alloy-inventory' inventory
 #   6. Creates or updates the 'alloy-credential' machine credential
 #   7. Creates or updates the 'alloy-template' job template
-#   8. Creates inventory groups from bundle group_vars templates
+#   8. Creates inventory groups from playbooks/vars/alloy.yml and bundle overlays
 #
 # Prerequisites: AWX running (04-deploy-awx.sh), Alloy repo (06-setup-alloy-repo.sh)
 # ==============================================================================
@@ -152,7 +152,7 @@ discover_inventory_groups() {
     fi
 
     if ! git --git-dir="${BARE_REPO}" show-ref --verify --quiet refs/heads/main; then
-        err "Bare repo ${BARE_REPO} has no main branch to inspect for group_vars"
+        err "Bare repo ${BARE_REPO} has no main branch to inspect"
         return 1
     fi
 
@@ -167,36 +167,73 @@ import sys
 bare_repo = sys.argv[1]
 treeish = "refs/heads/main"
 
-files = subprocess.check_output(
-    ["git", f"--git-dir={bare_repo}", "ls-tree", "-r", "--name-only", treeish, "playbooks/templates/alloy/group_vars"],
-    text=True,
-).splitlines()
-
-group_map = collections.OrderedDict()
-
-for path in files:
-    base = os.path.basename(path)
-    if not base.endswith(".yml.j2"):
-        continue
-    if base.startswith('.'):
-        continue
-
-    raw = subprocess.check_output(
+def git_show(path: str) -> str:
+    return subprocess.check_output(
         ["git", f"--git-dir={bare_repo}", "show", f"{treeish}:{path}"],
         text=True,
     )
 
-    product = None
-    lines = raw.splitlines()
+def git_ls(prefix: str):
+    return subprocess.check_output(
+        ["git", f"--git-dir={bare_repo}", "ls-tree", "-r", "--name-only", treeish, prefix],
+        text=True,
+    ).splitlines()
+
+def parse_top_level_list(lines, key):
+    out = []
+    in_section = False
     for line in lines:
-        match = re.match(r"\s*product:\s*(.+?)\s*$", line)
-        if match:
-            product = match.group(1).strip().strip("\"'")
+        if re.match(rf"^{re.escape(key)}:\s*$", line):
+            in_section = True
+            continue
+        if in_section and re.match(r"^[A-Za-z0-9_]+:\s*$", line):
             break
+        if in_section:
+            m = re.match(r"^\s{2}-\s+(.+?)\s*$", line)
+            if m:
+                out.append(m.group(1).strip())
+    return out
 
-    if not product:
-        continue
+def parse_map_of_lists(lines, key):
+    out = collections.OrderedDict()
+    in_section = False
+    current = None
+    for line in lines:
+        if re.match(rf"^{re.escape(key)}:\s*$", line):
+            in_section = True
+            continue
+        if in_section and re.match(r"^[A-Za-z0-9_]+:\s*$", line):
+            break
+        if not in_section:
+            continue
+        m_key = re.match(r"^\s{2}([A-Za-z0-9_.-]+):\s*$", line)
+        if m_key:
+            current = m_key.group(1)
+            out[current] = []
+            continue
+        m_item = re.match(r"^\s{4}-\s+(.+?)\s*$", line)
+        if m_item and current is not None:
+            out[current].append(m_item.group(1).strip())
+    return out
 
+def parse_map_of_scalars(lines, key):
+    out = collections.OrderedDict()
+    in_section = False
+    for line in lines:
+        if re.match(rf"^{re.escape(key)}:\s*$", line):
+            in_section = True
+            continue
+        if in_section and re.match(r"^[A-Za-z0-9_]+:\s*$", line):
+            break
+        if not in_section:
+            continue
+        m = re.match(r"^\s{2}([A-Za-z0-9_.-]+):\s+(.+?)\s*$", line)
+        if m:
+            out[m.group(1)] = m.group(2)
+    return out
+
+def sanitize_group_vars(raw):
+    lines = raw.splitlines()
     safe_lines = []
     omitted_dynamic = False
     for line in lines:
@@ -204,21 +241,119 @@ for path in files:
             omitted_dynamic = True
             break
         safe_lines.append(line)
-
     safe_raw = "\n".join(safe_lines).rstrip()
     if omitted_dynamic:
         safe_raw = (safe_raw + "\n# dynamic template content omitted for AWX inventory compatibility").strip()
+    return safe_raw
 
-    item = group_map.setdefault(product, {"sources": [], "parts": []})
-    item["sources"].append(base)
-    item["parts"].append(f"# source: {base}\n{safe_raw}\n")
+def parse_simple_value(text, key):
+    for line in text.splitlines():
+        m = re.match(rf"\s*{re.escape(key)}:\s*(.+?)\s*$", line)
+        if m:
+            return m.group(1).strip().strip('"\'')
+    return None
+
+def yaml_list_block(name, values):
+    lines = [f"{name}:"]
+    if values:
+        lines.extend([f"  - {value}" for value in values])
+    else:
+        lines.append("  []")
+    return lines
+
+def unique_keep_order(values):
+    seen = set()
+    out = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+alloy_lines = git_show("playbooks/vars/alloy.yml").splitlines()
+components_by_product = parse_map_of_lists(alloy_lines, "components_by_product")
+compose_by_product = parse_map_of_scalars(alloy_lines, "compose_by_product")
+windows_groups = parse_top_level_list(alloy_lines, "windows_groups")
+linux_groups = parse_top_level_list(alloy_lines, "linux_groups")
+
+overlays = {}
+for path in git_ls("playbooks/templates/alloy/group_vars"):
+    base = os.path.basename(path)
+    if not base.endswith(".yml.j2") or base.startswith('.'):
+        continue
+    raw = git_show(path)
+    product = parse_simple_value(raw, "product")
+    if not product:
+        continue
+    overlays[product] = {
+        "file": base,
+        "raw": raw,
+        "safe": sanitize_group_vars(raw),
+        "extra_key": parse_simple_value(raw, "alloy_component_extras"),
+    }
+
+def resolve_group_name(alias):
+    base = alias.replace('-', '_')
+    if base in overlays:
+        return base
+    file_alias = alias
+    for product, meta in overlays.items():
+        if meta["file"] == f"{file_alias}.yml.j2":
+            return product
+    if alias in components_by_product:
+        return alias
+    if base in components_by_product:
+        return base
+    return base
+
+ordered_candidates = []
+for alias in windows_groups + linux_groups:
+    ordered_candidates.append(resolve_group_name(alias))
+for product in compose_by_product.keys():
+    ordered_candidates.append(product)
+for product in components_by_product.keys():
+    if product.endswith("_extra") or product.endswith("_extras"):
+        continue
+    ordered_candidates.append(product)
+
+group_map = collections.OrderedDict()
+for product in ordered_candidates:
+    if product in group_map:
+        continue
+    base_components = components_by_product.get(product, [])
+    overlay = overlays.get(product)
+    extra_key = overlay.get("extra_key") if overlay else None
+    extra_components = components_by_product.get(extra_key, []) if extra_key else []
+    resolved = unique_keep_order(base_components + extra_components)
+    compose_file = compose_by_product.get(product)
+
+    vars_lines = []
+    sources = ["playbooks/vars/alloy.yml"]
+    if overlay:
+        vars_lines.extend(overlay["safe"].splitlines())
+        sources.append(f"playbooks/templates/alloy/group_vars/{overlay['file']}")
+    else:
+        vars_lines.append(f"product: {product}")
+
+    vars_lines.append("# source: playbooks/vars/alloy.yml")
+    vars_lines.extend(yaml_list_block("alloy_components_from_product", base_components))
+    if extra_key:
+        vars_lines.append(f"alloy_component_extras_resolved_from: {extra_key}")
+        vars_lines.extend(yaml_list_block("alloy_components_from_extra_set", extra_components))
+    if compose_file:
+        vars_lines.append(f"compose_file: {compose_file}")
+    vars_lines.extend(yaml_list_block("alloy_components_resolved", resolved))
+
+    group_map[product] = {
+        "variables": "\n".join(vars_lines).rstrip() + "\n",
+        "sources": ", ".join(sources),
+    }
 
 for product, item in group_map.items():
-    merged = "\n".join(item["parts"]).rstrip() + "\n"
     print("\t".join([
         base64.b64encode(product.encode()).decode(),
-        base64.b64encode(merged.encode()).decode(),
-        base64.b64encode(", ".join(item["sources"]).encode()).decode(),
+        base64.b64encode(item["variables"].encode()).decode(),
+        base64.b64encode(item["sources"].encode()).decode(),
     ]))
 PY
 }
@@ -346,7 +481,7 @@ step "Creating inventory groups"
 GROUP_DISCOVERY_OUTPUT="$(discover_inventory_groups)"
 
 if [[ -z "${GROUP_DISCOVERY_OUTPUT}" ]]; then
-    err "No inventory groups could be discovered from playbooks/templates/alloy/group_vars in ${BARE_REPO}"
+    err "No inventory groups could be discovered from playbooks/vars/alloy.yml in ${BARE_REPO}"
     exit 1
 fi
 
