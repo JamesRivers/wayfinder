@@ -285,21 +285,32 @@ for path in git_ls("playbooks/templates/alloy/group_vars"):
     product = parse_simple_value(raw, "product")
     if not product:
         continue
-    overlays[product] = {
-        "file": base,
-        "raw": raw,
-        "safe": sanitize_group_vars(raw),
-        "extra_key": parse_simple_value(raw, "alloy_component_extras"),
-    }
+    item = overlays.setdefault(product, {
+        "files": [],
+        "parts": [],
+        "extra_keys": [],
+    })
+    item["files"].append(base)
+    item["parts"].append(f"# source: {base}\n{sanitize_group_vars(raw)}")
+    extra_key = parse_simple_value(raw, "alloy_component_extras")
+    if extra_key:
+        item["extra_keys"].append(extra_key)
+
+
+def overlay_for_alias(alias):
+    for product, meta in overlays.items():
+        if f"{alias}.yml.j2" in meta["files"]:
+            return product
+    return None
+
 
 def resolve_group_name(alias):
     base = alias.replace('-', '_')
     if base in overlays:
         return base
-    file_alias = alias
-    for product, meta in overlays.items():
-        if meta["file"] == f"{file_alias}.yml.j2":
-            return product
+    overlay_product = overlay_for_alias(alias)
+    if overlay_product:
+        return overlay_product
     if alias in components_by_product:
         return alias
     if base in components_by_product:
@@ -322,23 +333,26 @@ for product in ordered_candidates:
         continue
     base_components = components_by_product.get(product, [])
     overlay = overlays.get(product)
-    extra_key = overlay.get("extra_key") if overlay else None
-    extra_components = components_by_product.get(extra_key, []) if extra_key else []
+    extra_keys = unique_keep_order(overlay.get("extra_keys", [])) if overlay else []
+    extra_components = []
+    for extra_key in extra_keys:
+        extra_components.extend(components_by_product.get(extra_key, []))
+    extra_components = unique_keep_order(extra_components)
     resolved = unique_keep_order(base_components + extra_components)
     compose_file = compose_by_product.get(product)
 
     vars_lines = []
     sources = ["playbooks/vars/alloy.yml"]
     if overlay:
-        vars_lines.extend(overlay["safe"].splitlines())
-        sources.append(f"playbooks/templates/alloy/group_vars/{overlay['file']}")
+        vars_lines.extend("\n\n".join(overlay["parts"]).splitlines())
+        sources.extend([f"playbooks/templates/alloy/group_vars/{name}" for name in overlay["files"]])
     else:
         vars_lines.append(f"product: {product}")
 
     vars_lines.append("# source: playbooks/vars/alloy.yml")
     vars_lines.extend(yaml_list_block("alloy_components_from_product", base_components))
-    if extra_key:
-        vars_lines.append(f"alloy_component_extras_resolved_from: {extra_key}")
+    if extra_keys:
+        vars_lines.extend(yaml_list_block("alloy_component_extras_resolved_from", extra_keys))
         vars_lines.extend(yaml_list_block("alloy_components_from_extra_set", extra_components))
     if compose_file:
         vars_lines.append(f"compose_file: {compose_file}")
