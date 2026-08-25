@@ -187,7 +187,8 @@ for path in files:
     )
 
     product = None
-    for line in raw.splitlines():
+    lines = raw.splitlines()
+    for line in lines:
         match = re.match(r"\s*product:\s*(.+?)\s*$", line)
         if match:
             product = match.group(1).strip().strip("\"'")
@@ -196,9 +197,21 @@ for path in files:
     if not product:
         continue
 
+    safe_lines = []
+    omitted_dynamic = False
+    for line in lines:
+        if re.match(r"\s*\{%.*%\}\s*$", line):
+            omitted_dynamic = True
+            break
+        safe_lines.append(line)
+
+    safe_raw = "\n".join(safe_lines).rstrip()
+    if omitted_dynamic:
+        safe_raw = (safe_raw + "\n# dynamic template content omitted for AWX inventory compatibility").strip()
+
     item = group_map.setdefault(product, {"sources": [], "parts": []})
     item["sources"].append(base)
-    item["parts"].append(f"# source: {base}\n{raw.rstrip()}\n")
+    item["parts"].append(f"# source: {base}\n{safe_raw}\n")
 
 for product, item in group_map.items():
     merged = "\n".join(item["parts"]).rstrip() + "\n"
