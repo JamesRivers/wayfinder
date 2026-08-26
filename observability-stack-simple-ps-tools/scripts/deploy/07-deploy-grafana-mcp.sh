@@ -30,10 +30,26 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step() { echo -e "\n${YELLOW}>>> $*${NC}"; }
 
+# --- Kubernetes wrapper ------------------------------------------------------
+kcmd() {
+    if kubectl version --client >/dev/null 2>&1 && kubectl get nodes >/dev/null 2>&1; then
+        kubectl "$@"
+        return 0
+    fi
+
+    if command -v sudo >/dev/null 2>&1 && sudo k3s kubectl get nodes >/dev/null 2>&1; then
+        sudo k3s kubectl "$@"
+        return 0
+    fi
+
+    err "Could not access Kubernetes via kubectl or sudo k3s kubectl"
+    return 1
+}
+
 # --- Pre-flight checks -------------------------------------------------------
 step "Pre-flight checks"
 
-if ! kubectl get nodes &>/dev/null; then
+if ! kcmd get nodes &>/dev/null; then
     err "kubectl cannot reach the cluster. Is K3s running?"
     exit 1
 fi
@@ -48,13 +64,13 @@ log "Cluster reachable, deploy directory found"
 # --- Create MCP auth secret ---------------------------------------------------
 step "Creating MCP auth secret"
 
-if kubectl get secret -n "${NAMESPACE}" grafana-mcp-auth &>/dev/null; then
+if kcmd get secret -n "${NAMESPACE}" grafana-mcp-auth &>/dev/null; then
     log "Secret grafana-mcp-auth already exists"
 else
     # Generate a random server token
     SERVER_TOKEN=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-    kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create secret generic grafana-mcp-auth \
+    kcmd create namespace "${NAMESPACE}" --dry-run=client -o yaml | kcmd apply -f -
+    kcmd create secret generic grafana-mcp-auth \
         --namespace="${NAMESPACE}" \
         --from-literal=server-token="${SERVER_TOKEN}"
     log "Secret grafana-mcp-auth created"
@@ -63,14 +79,14 @@ fi
 # --- Deploy -------------------------------------------------------------------
 step "Deploying Grafana MCP sidecar to namespace '${NAMESPACE}'"
 
-kubectl apply -k "${AI_DEPLOY}"
+kcmd apply -k "${AI_DEPLOY}"
 
 log "MCP manifests applied"
 
 # --- Create external NodePort service ----------------------------------------
 step "Exposing MCP externally on NodePort 30800"
 
-kubectl apply -f - <<EOF
+kcmd apply -f - <<EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -91,7 +107,7 @@ log "MCP exposed on port 30800"
 # --- Wait for pod to be ready ------------------------------------------------
 step "Waiting for MCP pod to be ready (up to 120s)"
 
-kubectl rollout status deployment/grafana-mcp -n "${NAMESPACE}" --timeout=120s
+kcmd rollout status deployment/grafana-mcp -n "${NAMESPACE}" --timeout=120s
 
 log "Grafana MCP pod is ready"
 
@@ -100,17 +116,17 @@ step "Verification"
 
 echo ""
 echo "Pods:"
-kubectl get pods -n "${NAMESPACE}"
+kcmd get pods -n "${NAMESPACE}"
 
 echo ""
 echo "Services:"
-kubectl get svc -n "${NAMESPACE}"
+kcmd get svc -n "${NAMESPACE}"
 
 echo ""
 log "Grafana MCP deployment complete"
 
-HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-MCP_TOKEN=$(kubectl get secret -n "${NAMESPACE}" grafana-mcp-auth -o jsonpath='{.data.server-token}' | base64 -d)
+HOST_IP=$(kcmd get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+MCP_TOKEN=$(kcmd get secret -n "${NAMESPACE}" grafana-mcp-auth -o jsonpath='{.data.server-token}' | base64 -d)
 
 echo ""
 echo "  MCP internal:  http://grafana-mcp.ai.svc.cluster.local:8000"
