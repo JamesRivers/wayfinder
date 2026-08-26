@@ -136,6 +136,16 @@ class AWXClient:
         self.request("POST", path, {"id": obj_id})
         return True
 
+    def list_credentials(self) -> list[dict[str, Any]]:
+        data = self.request("GET", "/api/v2/credentials/?page_size=200")
+        return data.get("results", []) if isinstance(data, dict) else []
+
+    def find_galaxy_credential(self) -> dict[str, Any] | None:
+        for cred in self.list_credentials():
+            if cred.get("kind") == "galaxy_api_token" or cred.get("credential_type") == 19:
+                return cred
+        return None
+
     def ensure_template_extra_vars(self, template_id: int, key: str, value: Any) -> bool:
         template = self.request("GET", f"/api/v2/job_templates/{template_id}/")
         raw = template.get("extra_vars") or "{}"
@@ -198,6 +208,20 @@ def main() -> int:
         args.org,
         {"name": args.org},
     )
+    galaxy_credential = client.find_galaxy_credential()
+    if galaxy_credential:
+        attached = client.ensure_association(
+            f"/api/v2/organizations/{org['id']}/galaxy_credentials/",
+            galaxy_credential["id"],
+        )
+        if attached:
+            eprint(
+                f"Attached Galaxy credential {galaxy_credential['name']!r} to organisation {org['name']}"
+            )
+    else:
+        eprint(
+            "Warning: no Galaxy credential found in AWX; project sync may skip collections/roles from requirements files"
+        )
     project, created_project = client.ensure_object(
         "/api/v2/projects/",
         args.project,

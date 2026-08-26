@@ -148,6 +148,19 @@ awx_find_group() {
         | python3 -c "import sys,json; r=json.load(sys.stdin).get('results',[]); print(r[0]['id'] if r else '')" 2>/dev/null || echo ""
 }
 
+awx_find_galaxy_credential() {
+    awx_get "/credentials/?page_size=200" \
+        | python3 -c "import sys,json; creds=json.load(sys.stdin).get('results',[]); galaxy=[c for c in creds if c.get('kind')=='galaxy_api_token' or c.get('credential_type')==19]; print(galaxy[0]['id'] if galaxy else '')" 2>/dev/null || echo ""
+}
+
+awx_org_has_galaxy_credential() {
+    local org_id="$1"
+    local cred_id="$2"
+
+    awx_get "/organizations/${org_id}/galaxy_credentials/" \
+        | python3 -c "import sys,json; results=json.load(sys.stdin).get('results',[]); target=int(sys.argv[1]); print('yes' if any(item.get('id') == target for item in results) else 'no')" "${cred_id}" 2>/dev/null || echo "no"
+}
+
 awx_create_or_patch() {
     local endpoint="$1"
     local name="$2"
@@ -441,6 +454,19 @@ step "Creating or updating organisation '${ORG_NAME}'"
 
 ORG_ID=$(awx_create_or_patch "/organizations/" "${ORG_NAME}" "{\"name\":\"${ORG_NAME}\",\"description\":\"Observability Platform\"}")
 log "Organisation: ${ORG_NAME} (id: ${ORG_ID})"
+
+GALAXY_CRED_ID="$(awx_find_galaxy_credential)"
+if [[ -n "${GALAXY_CRED_ID}" ]]; then
+    if [[ "$(awx_org_has_galaxy_credential "${ORG_ID}" "${GALAXY_CRED_ID}")" != "yes" ]]; then
+        step "Associating Galaxy credential with organisation '${ORG_NAME}'"
+        awx_post "/organizations/${ORG_ID}/galaxy_credentials/" "{\"id\": ${GALAXY_CRED_ID}}" > /dev/null
+        log "Galaxy credential ${GALAXY_CRED_ID} attached to organisation ${ORG_NAME}"
+    else
+        log "Galaxy credential ${GALAXY_CRED_ID} already attached to organisation ${ORG_NAME}"
+    fi
+else
+    warn "No Galaxy credential found in AWX; project sync will skip collections/roles from requirements files"
+fi
 
 # --- Project ----------------------------------------------------------------
 step "Creating or updating project '${PROJECT_NAME}'"
