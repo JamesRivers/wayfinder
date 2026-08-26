@@ -66,11 +66,16 @@ kcmd() {
 }
 
 # --- Playbook resolution -----------------------------------------------------
-repo_has_playbook() {
-    local playbook_path="$1"
+repo_has_path() {
+    local repo_path="$1"
     [[ -d "${BARE_REPO}" ]] || return 1
     git --git-dir="${BARE_REPO}" show-ref --verify --quiet refs/heads/main || return 1
-    git --git-dir="${BARE_REPO}" cat-file -e "refs/heads/main:${playbook_path}" 2>/dev/null
+    git --git-dir="${BARE_REPO}" cat-file -e "refs/heads/main:${repo_path}" 2>/dev/null
+}
+
+repo_has_playbook() {
+    local playbook_path="$1"
+    repo_has_path "${playbook_path}"
 }
 
 resolve_linux_playbook() {
@@ -109,6 +114,10 @@ resolve_windows_playbook() {
 
 LINUX_PLAYBOOK_PATH="$(resolve_linux_playbook)"
 WINDOWS_PLAYBOOK_PATH="$(resolve_windows_playbook || true)"
+WINDOWS_COLLECTIONS_REQUIREMENTS_MISSING=false
+if [[ -n "${WINDOWS_PLAYBOOK_PATH}" ]] && ! repo_has_path "collections/requirements.yml"; then
+    WINDOWS_COLLECTIONS_REQUIREMENTS_MISSING=true
+fi
 
 # --- AWX API helpers ---------------------------------------------------------
 awx_get() {
@@ -419,6 +428,9 @@ log "AWX API responding, admin password retrieved"
 log "Selected Linux playbook: ${LINUX_PLAYBOOK_PATH}"
 if [[ -n "${WINDOWS_PLAYBOOK_PATH}" ]]; then
     log "Selected Windows playbook: ${WINDOWS_PLAYBOOK_PATH}"
+    if [[ "${WINDOWS_COLLECTIONS_REQUIREMENTS_MISSING}" == true ]]; then
+        warn "Published bundle has a Windows playbook but no collections/requirements.yml; Windows jobs may fail to resolve community.windows/ansible.windows modules"
+    fi
 else
     warn "No Windows playbook found in the published bundle"
 fi
