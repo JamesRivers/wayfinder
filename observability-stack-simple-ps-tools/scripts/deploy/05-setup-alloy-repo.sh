@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 06-setup-alloy-repo.sh — Set up the Alloy bundle bare git repo + git-daemon
+# 05-setup-alloy-repo.sh — Set up the Alloy bundle bare git repo + git-daemon
 #
-# Usage: bash 06-setup-alloy-repo.sh [REPO_DIR] [BUNDLE_SOURCE]
+# Usage: bash 05-setup-alloy-repo.sh [REPO_DIR] [BUNDLE_SOURCE]
 #
 # What this does:
 #   1. Creates a bare git repo for the Alloy template bundle
@@ -208,4 +208,4 @@ echo ""
 echo "  Bundle source: ${BUNDLE_SOURCE}"
 echo "  Bare repo:     ${BARE_REPO}"
 echo "  Git URL:       git://${HOST_IP}:9418/alloy-template-bundle.git"
-echo "  Next step:     bash ~/observability-stack/scripts/deploy/05-seed-awx.sh"
+echo "  Next step:     bash ~/observability-stack/scripts/deploy/06-seed-awx.sh"

@@ -21,8 +21,8 @@ All deployment is driven by numbered bash scripts in `scripts/deploy/`. An engin
 | 02-deploy-garage.sh | Storage | Garage StatefulSet, layout, buckets, API keys | |
 | 03-deploy-observability.sh | LGTM | Prometheus, Mimir, Loki, Tempo, Grafana, datasources, ingress | |
 | 04-deploy-awx.sh | AWX | AWX operator + instance, wait for ready | |
-| 05-seed-awx.sh | AWX | Seed project, inventory, credential, job template, groups | Run after the template repo is cloned and 06 has published the mirror |
-| 06-setup-alloy-repo.sh | Alloy | Bare git repo + git-daemon for Alloy bundle | Run after 04, using the cloned `tier2-ansible-collection` repo as the source |
+| 06-seed-awx.sh | AWX | Seed project, inventory, credential, job template, groups | Run after the template repo is cloned and 05 has published the mirror |
+| 05-setup-alloy-repo.sh | Alloy | Bare git repo + git-daemon for Alloy bundle | Run after 04, using the cloned `tier2-ansible-collection` repo as the source |
 | 07-deploy-grafana-mcp.sh | AI | Grafana MCP sidecar (optional) | |
 
 ## Inputs

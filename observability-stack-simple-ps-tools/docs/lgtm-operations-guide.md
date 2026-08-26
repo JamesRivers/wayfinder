@@ -373,14 +373,14 @@ After `04-deploy-awx.sh`, clone the template repo onto the host and then publish
 ```bash
 git clone <tier2-ansible-collection-url> ~/tier2-ansible-collection
 
-bash ~/observability-stack/scripts/deploy/06-setup-alloy-repo.sh \
+bash ~/observability-stack/scripts/deploy/05-setup-alloy-repo.sh \
   ~/observability-stack \
   ~/tier2-ansible-collection
 
-bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
+bash ~/observability-stack/scripts/deploy/06-seed-awx.sh
 ```
 
-`05-seed-awx.sh` now also:
+`06-seed-awx.sh` now also:
 - falls back to `sudo k3s kubectl` if the calling user cannot read the K3s kubeconfig directly
 - auto-detects the deployment playbook from `/tmp/git-repos/alloy-template-bundle.git`
 - prefers `playbooks/alloy_ubuntu.yml` when `playbooks/alloy-deploy.yml` is not present
@@ -389,7 +389,7 @@ bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
 - merges repeated overlay contributors for the same product into one AWX group instead of replacing earlier inputs
 - writes resolved component detail into AWX group Variables so the UI shows more than thin selectors
 
-`06-setup-alloy-repo.sh` now supports this directly:
+`05-setup-alloy-repo.sh` now supports this directly:
 - optional second arg = explicit bundle source path
 - default source = `~/tier2-ansible-collection`
 - fallback source = `REPO_DIR/alloy-bundle`

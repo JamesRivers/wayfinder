@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 05-seed-awx.sh — Seed AWX with Alloy project, inventory, and job template
+# 06-seed-awx.sh — Seed AWX with Alloy project, inventory, and job template
 #
-# Usage: bash 05-seed-awx.sh
+# Usage: bash 06-seed-awx.sh
 #
 # What this does:
 #   1. Retrieves the AWX admin password from the K8s secret
@@ -14,7 +14,7 @@
 #   7. Creates or updates separate Linux and Windows AWX job templates
 #   8. Creates inventory groups from playbooks/vars/alloy.yml and bundle overlays
 #
-# Prerequisites: AWX running (04-deploy-awx.sh), Alloy repo (06-setup-alloy-repo.sh)
+# Prerequisites: AWX running (04-deploy-awx.sh), Alloy repo (05-setup-alloy-repo.sh)
 # ==============================================================================
 set -euo pipefail
 

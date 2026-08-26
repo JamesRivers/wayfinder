@@ -196,5 +196,5 @@ echo "  Password cmd:  kubectl get secret -n awx ${AWX_INSTANCE}-admin-password 
 echo ""
 echo "  Next steps:"
 echo "    1. git clone <tier2-ansible-collection-url> ~/tier2-ansible-collection"
-echo "    2. bash ~/observability-stack/scripts/deploy/06-setup-alloy-repo.sh ~/observability-stack ~/tier2-ansible-collection"
-echo "    3. bash ~/observability-stack/scripts/deploy/05-seed-awx.sh"
+echo "    2. bash ~/observability-stack/scripts/deploy/05-setup-alloy-repo.sh ~/observability-stack ~/tier2-ansible-collection"
+echo "    3. bash ~/observability-stack/scripts/deploy/06-seed-awx.sh"
