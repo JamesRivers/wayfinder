@@ -392,8 +392,9 @@ bash ~/observability-stack/scripts/deploy/06-seed-awx.sh
 `05-setup-alloy-repo.sh` now supports this directly:
 - optional second arg = explicit bundle source path
 - default source = `~/tier2-ansible-collection`
-- fallback source = `REPO_DIR/alloy-bundle`
-- when the source is a git repo, it pushes the current HEAD into `/tmp/git-repos/alloy-template-bundle.git` as branch `main` and sets the bare repo HEAD to `main`
+- if that does not exist, fallback = `~/observability-stack/alloy-bundle`
+- when run with `sudo`, the script resolves the invoking user's home (for example `/home/imagine`) instead of `/root`
+- publishes the source into `/tmp/git-repos/alloy-template-bundle.git`
 
 Equivalent manual commands, if needed:
 

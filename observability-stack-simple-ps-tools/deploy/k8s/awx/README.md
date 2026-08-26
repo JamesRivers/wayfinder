@@ -19,6 +19,7 @@ Current bootstrap path:
 - `scripts/deploy/05-setup-alloy-repo.sh` accepts an optional second argument for the bundle source path.
 - The preferred template source is a fresh clone at `~/tier2-ansible-collection`.
 - If the second argument is omitted, `05-setup-alloy-repo.sh` now looks for `~/tier2-ansible-collection` first and only then falls back to `REPO_DIR/alloy-bundle`.
+- When `05-setup-alloy-repo.sh` is run with `sudo`, it resolves `~` from the invoking user (for example `/home/imagine`) rather than `/root`.
 - When the bundle source is itself a git repo, `05-setup-alloy-repo.sh` pushes its current HEAD into `/tmp/git-repos/alloy-template-bundle.git` as branch `main` and sets the bare repo HEAD to `main`.
 - `scripts/deploy/06-seed-awx.sh` now auto-detects the deployment playbook from `/tmp/git-repos/alloy-template-bundle.git` and prefers `playbooks/alloy_ubuntu.yml` when `playbooks/alloy-deploy.yml` is absent.
 - `scripts/deploy/06-seed-awx.sh` falls back to `sudo k3s kubectl` when the calling user cannot read the K3s kubeconfig directly.

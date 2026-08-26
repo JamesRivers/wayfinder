@@ -21,7 +21,18 @@ REPO_DIR="${1:-$(cd "$(dirname "$0")/../.." && pwd)}"
 EXPLICIT_BUNDLE_SOURCE="${2:-}"
 GIT_REPOS_DIR="/tmp/git-repos"
 BARE_REPO="${GIT_REPOS_DIR}/alloy-template-bundle.git"
-DEFAULT_BUNDLE_SOURCE="${HOME}/tier2-ansible-collection"
+INSTALL_USER="${SUDO_USER:-$(whoami)}"
+INSTALL_HOME="$(python3 - <<'PY' "${INSTALL_USER}" "${HOME}"
+import os, pwd, sys
+user = sys.argv[1]
+fallback = sys.argv[2]
+try:
+    print(pwd.getpwnam(user).pw_dir)
+except KeyError:
+    print(fallback)
+PY
+)"
+DEFAULT_BUNDLE_SOURCE="${INSTALL_HOME}/tier2-ansible-collection"
 FALLBACK_BUNDLE_SOURCE_1="${REPO_DIR}/alloy-bundle"
 FALLBACK_BUNDLE_SOURCE_2=""
 
@@ -135,15 +146,15 @@ if [[ -d "${BUNDLE_SOURCE}" ]]; then
 else
     warn "No bundle source found at ${BUNDLE_SOURCE}"
     echo "  Clone the Alloy template repo first, for example:"
-    echo "    git clone <tier2-ansible-collection-url> ${HOME}/tier2-ansible-collection"
+    echo "    git clone <tier2-ansible-collection-url> ${INSTALL_HOME}/tier2-ansible-collection"
     echo ""
     echo "  Supported source locations are:"
     echo "    1. explicit second argument"
-    echo "    2. ${HOME}/tier2-ansible-collection"
+    echo "    2. ${INSTALL_HOME}/tier2-ansible-collection"
     echo "    3. ${REPO_DIR}/alloy-bundle"
     echo ""
     echo "  Manual fallback after cloning:"
-    echo "    cd ${HOME}/tier2-ansible-collection"
+    echo "    cd ${INSTALL_HOME}/tier2-ansible-collection"
     echo "    git push ${BARE_REPO} HEAD:refs/heads/main"
     echo "    git --git-dir=${BARE_REPO} symbolic-ref HEAD refs/heads/main"
 fi
