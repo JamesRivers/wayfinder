@@ -416,7 +416,12 @@ if ! awx_get "/ping/" | grep -q 'ha'; then
 fi
 
 log "AWX API responding, admin password retrieved"
-log "Selected playbook: ${PLAYBOOK_PATH}"
+log "Selected Linux playbook: ${LINUX_PLAYBOOK_PATH}"
+if [[ -n "${WINDOWS_PLAYBOOK_PATH}" ]]; then
+    log "Selected Windows playbook: ${WINDOWS_PLAYBOOK_PATH}"
+else
+    warn "No Windows playbook found in the published bundle"
+fi
 log "Project git URL: ${GIT_URL}"
 
 # --- Organisation -----------------------------------------------------------
