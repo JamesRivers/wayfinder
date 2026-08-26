@@ -35,11 +35,11 @@ graph TB
             end
 
             subgraph "observability namespace"
-                GR["Grafana 11.1.0<br/>Dashboard UI"]
-                PR["Prometheus v2.54.1<br/>Short-retention scraper"]
-                MI["Mimir 2.13.0<br/>Long-term metrics"]
-                LO["Loki 3.1.0<br/>Log aggregation"]
-                TE["Tempo 2.8.0<br/>Distributed traces"]
+                GR["Grafana 13.2.0<br/>Dashboard UI"]
+                PR["Prometheus v3.14.0<br/>Short-retention scraper"]
+                MI["Mimir 3.2.0<br/>Long-term metrics"]
+                LO["Loki 3.7.6<br/>Log aggregation"]
+                TE["Tempo 3.0.3<br/>Distributed traces"]
             end
 
             subgraph "awx namespace"
@@ -111,7 +111,7 @@ The `/mimir` and `/loki` routes use Traefik Middleware resources (`strip-mimir-p
 
 ### 3.2 Prometheus
 
-- Image: `prom/prometheus:v2.54.1`
+- Image: `prom/prometheus:v3.14.0`
 - Role: Short-retention local scraper (24h retention)
 - Storage: 5Gi PVC (`prometheus-data`, local-path)
 - Config: `prometheus-config` ConfigMap
@@ -123,7 +123,7 @@ Prometheus is the local scraper for cluster-internal targets. Remote Alloy agent
 
 ### 3.3 Mimir
 
-- Image: `grafana/mimir:2.13.0`
+- Image: `grafana/mimir:3.2.0`
 - Role: Long-term metrics storage (remote_write target for Alloy agents)
 - Storage: 10Gi PVC (`mimir-data`, local-path) for compactor/local state
 - Object storage: Garage S3 (`mimir-blocks` bucket)
@@ -135,7 +135,7 @@ Prometheus is the local scraper for cluster-internal targets. Remote Alloy agent
 
 ### 3.4 Loki
 
-- Image: `grafana/loki:3.1.0`
+- Image: `grafana/loki:3.7.6`
 - Role: Log aggregation
 - Storage: 10Gi PVC (`loki-data`, local-path) — filesystem backend, no S3
 - Config: `loki-config` ConfigMap
@@ -146,7 +146,7 @@ Prometheus is the local scraper for cluster-internal targets. Remote Alloy agent
 
 ### 3.5 Tempo
 
-- Image: `grafana/tempo:2.8.0`
+- Image: `grafana/tempo:3.0.3`
 - Role: Distributed trace storage
 - Object storage: Garage S3 (`tempo` bucket)
 - Receivers: OTLP gRPC (:4317) and HTTP (:4318)
@@ -154,7 +154,7 @@ Prometheus is the local scraper for cluster-internal targets. Remote Alloy agent
 
 ### 3.6 Grafana
 
-- Image: `grafana/grafana:11.1.0`
+- Image: `grafana/grafana:13.2.0`
 - Storage: 2Gi PVC (`grafana-data`, local-path)
 - Access: `http://172.16.47.163/` (via Traefik Ingress)
 - Credentials: admin / admin
@@ -705,11 +705,11 @@ Remote Alloy agents push telemetry to these endpoints through the Traefik ingres
 |--------------|-------------------------------|----------|
 | K3s          | —                             | v1.36.3+k3s1 |
 | Traefik      | (bundled with K3s)            | —        |
-| Grafana      | grafana/grafana               | 11.1.0   |
-| Prometheus   | prom/prometheus               | v2.54.1  |
-| Mimir        | grafana/mimir                 | 2.13.0   |
-| Loki         | grafana/loki                  | 3.1.0    |
-| Tempo        | grafana/tempo                 | 2.8.0    |
+| Grafana      | grafana/grafana               | 13.2.0   |
+| Prometheus   | prom/prometheus               | v3.14.0  |
+| Mimir        | grafana/mimir                 | 3.2.0    |
+| Loki         | grafana/loki                  | 3.7.6    |
+| Tempo        | grafana/tempo                 | 3.0.3    |
 | Garage       | dxflrs/garage                 | v2.3.0   |
 | AWX Operator | quay.io/ansible/awx-operator  | 2.19.1   |
 | Grafana MCP  | grafana/mcp-grafana           | 1.1.0    |
