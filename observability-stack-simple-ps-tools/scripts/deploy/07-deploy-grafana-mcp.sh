@@ -64,17 +64,29 @@ log "Cluster reachable, deploy directory found"
 # --- Create MCP auth secret ---------------------------------------------------
 step "Creating MCP auth secret"
 
-if kcmd get secret -n "${NAMESPACE}" grafana-mcp-auth &>/dev/null; then
+kcmd create namespace "${NAMESPACE}" --dry-run=client -o yaml | kcmd apply -f - >/dev/null
+
+EXISTING_TOKEN_B64="$(kcmd get secret -n "${NAMESPACE}" grafana-mcp-auth -o jsonpath='{.data.server-token}' 2>/dev/null || true)"
+if [[ -n "${EXISTING_TOKEN_B64}" ]]; then
+    SERVER_TOKEN="$(printf '%s' "${EXISTING_TOKEN_B64}" | base64 -d)"
     log "Secret grafana-mcp-auth already exists"
 else
-    # Generate a random server token
     SERVER_TOKEN=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-    kcmd create namespace "${NAMESPACE}" --dry-run=client -o yaml | kcmd apply -f -
-    kcmd create secret generic grafana-mcp-auth \
-        --namespace="${NAMESPACE}" \
-        --from-literal=server-token="${SERVER_TOKEN}"
-    log "Secret grafana-mcp-auth created"
+    log "Generating new grafana-mcp-auth token"
 fi
+
+kcmd apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-mcp-auth
+  namespace: ${NAMESPACE}
+type: Opaque
+stringData:
+  server-token: ${SERVER_TOKEN}
+EOF
+
+log "Secret grafana-mcp-auth applied"
 
 # --- Deploy -------------------------------------------------------------------
 step "Deploying Grafana MCP sidecar to namespace '${NAMESPACE}'"
