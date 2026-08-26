@@ -12,6 +12,17 @@ spec:
       labels:
         app.kubernetes.io/name: mimir
     spec:
+      initContainers:
+        - name: prepare-mimir-data
+          image: busybox:1.36
+          command:
+            - sh
+            - -lc
+            - |
+              mkdir -p /data/tsdb-sync /data/compactor /data/ruler /data/alertmanager
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
         - name: mimir
           image: grafana/mimir:3.2.0
