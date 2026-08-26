@@ -6,8 +6,8 @@
 #
 # What this does:
 #   1. Creates a bare git repo for the Alloy template bundle
-#   2. Populates it from an explicit bundle source, REPO_DIR/alloy-bundle,
-#      or ~/product-observavility
+#   2. Populates it from an explicit bundle source, ~/tier2-ansible-collection,
+#      or REPO_DIR/alloy-bundle
 #   3. Preserves git history when the source is itself a git repo
 #   4. Starts git-daemon to serve the repo over git:// protocol
 #   5. Verifies the repo is accessible
@@ -21,9 +21,9 @@ REPO_DIR="${1:-$(cd "$(dirname "$0")/../.." && pwd)}"
 EXPLICIT_BUNDLE_SOURCE="${2:-}"
 GIT_REPOS_DIR="/tmp/git-repos"
 BARE_REPO="${GIT_REPOS_DIR}/alloy-template-bundle.git"
-DEFAULT_BUNDLE_SOURCE="${REPO_DIR}/alloy-bundle"
-FALLBACK_BUNDLE_SOURCE_1="${HOME}/product-observavility"
-FALLBACK_BUNDLE_SOURCE_2="${HOME}/product-observability"
+DEFAULT_BUNDLE_SOURCE="${HOME}/tier2-ansible-collection"
+FALLBACK_BUNDLE_SOURCE_1="${REPO_DIR}/alloy-bundle"
+FALLBACK_BUNDLE_SOURCE_2=""
 
 # --- Colours ------------------------------------------------------------------
 RED='\033[0;31m'
@@ -53,7 +53,7 @@ select_bundle_source() {
         return 0
     fi
 
-    if [[ -d "${FALLBACK_BUNDLE_SOURCE_2}" ]]; then
+    if [[ -n "${FALLBACK_BUNDLE_SOURCE_2}" && -d "${FALLBACK_BUNDLE_SOURCE_2}" ]]; then
         echo "${FALLBACK_BUNDLE_SOURCE_2}"
         return 0
     fi
@@ -134,13 +134,16 @@ if [[ -d "${BUNDLE_SOURCE}" ]]; then
     fi
 else
     warn "No bundle source found at ${BUNDLE_SOURCE}"
+    echo "  Clone the Alloy template repo first, for example:"
+    echo "    git clone <tier2-ansible-collection-url> ${HOME}/tier2-ansible-collection"
+    echo ""
     echo "  Supported source locations are:"
     echo "    1. explicit second argument"
-    echo "    2. ${REPO_DIR}/alloy-bundle"
-    echo "    3. ${HOME}/product-observavility"
-    echo "    4. ${HOME}/product-observability"
-    echo "  Manual fallback:"
-    echo "    cd <bundle-source-repo>"
+    echo "    2. ${HOME}/tier2-ansible-collection"
+    echo "    3. ${REPO_DIR}/alloy-bundle"
+    echo ""
+    echo "  Manual fallback after cloning:"
+    echo "    cd ${HOME}/tier2-ansible-collection"
     echo "    git push ${BARE_REPO} HEAD:refs/heads/main"
     echo "    git --git-dir=${BARE_REPO} symbolic-ref HEAD refs/heads/main"
 fi

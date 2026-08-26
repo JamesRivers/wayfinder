@@ -17,7 +17,8 @@ Current bootstrap path:
 - The project source is the git mirror on this host: `git://172.16.47.163:9418/alloy-template-bundle.git`.
 - Re-running the bootstrap script is the supported refresh path when updated templates are pushed to the host.
 - `scripts/deploy/06-setup-alloy-repo.sh` accepts an optional second argument for the bundle source path.
-- If `REPO_DIR/alloy-bundle` is missing, `06-setup-alloy-repo.sh` falls back to `~/product-observavility` (and then `~/product-observability`) before warning.
+- The preferred template source is a fresh clone at `~/tier2-ansible-collection`.
+- If the second argument is omitted, `06-setup-alloy-repo.sh` now looks for `~/tier2-ansible-collection` first and only then falls back to `REPO_DIR/alloy-bundle`.
 - When the bundle source is itself a git repo, `06-setup-alloy-repo.sh` pushes its current HEAD into `/tmp/git-repos/alloy-template-bundle.git` as branch `main` and sets the bare repo HEAD to `main`.
 - `scripts/deploy/05-seed-awx.sh` now auto-detects the deployment playbook from `/tmp/git-repos/alloy-template-bundle.git` and prefers `playbooks/alloy_ubuntu.yml` when `playbooks/alloy-deploy.yml` is absent.
 - `scripts/deploy/05-seed-awx.sh` falls back to `sudo k3s kubectl` when the calling user cannot read the K3s kubeconfig directly.
@@ -26,12 +27,14 @@ Current bootstrap path:
 - AWX group Variables now include both selector inputs and resolved detail from `alloy.yml`, such as `alloy_components_from_product`, `alloy_components_from_extra_set`, `alloy_components_resolved`, and `compose_file` where applicable.
 - Repeated overlay contributors for the same product are merged into one AWX group instead of one file silently replacing another.
 
-Recommended script-only import flow when using the git-backed product repo:
+Recommended script-only import flow after AWX is up:
 
 ```bash
+git clone <tier2-ansible-collection-url> ~/tier2-ansible-collection
+
 bash ~/observability-stack/scripts/deploy/06-setup-alloy-repo.sh \
   ~/observability-stack \
-  /home/imagine/product-observavility
+  ~/tier2-ansible-collection
 
 bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
 ```

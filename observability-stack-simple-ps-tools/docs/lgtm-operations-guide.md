@@ -12,7 +12,7 @@ The stack runs entirely on a single K3s node. All user-facing traffic enters thr
 
 ```mermaid
 graph TB
-    BB["Bitbucket origin<br/>product-observavility.git"]
+    BB["Template source repo<br/>tier2-ansible-collection.git"]
 
     subgraph "Remote targets"
         A1["local-linux-test<br/>172.16.47.163"]
@@ -21,7 +21,7 @@ graph TB
     end
 
     subgraph "monlog01 host / control-plane node"
-        WC["Working clone<br/>/home/imagine/product-observavility"]
+        WC["Working clone<br/>/home/imagine/tier2-ansible-collection"]
         GD["git-daemon<br/>:9418<br/>base-path=/tmp/git-repos"]
         BR["AWX local bare repo<br/>/tmp/git-repos/alloy-template-bundle.git"]
 
@@ -82,7 +82,7 @@ graph TB
     AW -->|"runs Alloy playbooks<br/>against targets"| A2
 ```
 
-The Alloy templates are maintained in a normal working clone at `/home/imagine/product-observavility`, which is cloned from Bitbucket. AWX does not read Bitbucket directly; it reads the locally published bare mirror at `/tmp/git-repos/alloy-template-bundle.git` served by `git-daemon`.
+The Alloy templates are maintained in a normal working clone at `/home/imagine/tier2-ansible-collection`. AWX does not read that upstream repo directly; it reads the locally published bare mirror at `/tmp/git-repos/alloy-template-bundle.git` served by `git-daemon`.
 
 ## 2. Namespace layout
 
@@ -290,7 +290,7 @@ Each Alloy agent runs from `/etc/imagine/alloy/` with modular config files:
 
 ### 6.1 How it works
 
-AWX does not pull playbooks straight from Bitbucket or GitHub at job runtime. Instead, engineers keep a normal working clone on the host (for example `/home/imagine/product-observavility`, cloned from Bitbucket), and that working clone is published into a **local bare git repository** that AWX uses as its project source over the `git://` protocol.
+AWX does not pull playbooks straight from the upstream template repo at job runtime. Instead, engineers first clone `tier2-ansible-collection` onto the host (for example at `/home/imagine/tier2-ansible-collection`), and that working clone is published into a **local bare git repository** that AWX uses as its project source over the `git://` protocol.
 
 ```mermaid
 flowchart TB
@@ -328,7 +328,7 @@ flowchart TB
 
 **Bare repository** — The Alloy bundle that AWX reads lives at `/tmp/git-repos/alloy-template-bundle.git`. This is a local publish mirror for AWX consumption, not the human-edited working copy.
 
-**Working clone** — Engineers make template and playbook changes in `/home/imagine/product-observavility`, which is a normal git clone of the Bitbucket repo `product-observavility`.
+**Working clone** — Engineers make template and playbook changes in `/home/imagine/tier2-ansible-collection`, which is a normal git clone of the upstream `tier2-ansible-collection` repo.
 
 **AWX project** — The AWX project named `mon` is configured with:
 - SCM URL: `git://172.16.47.163:9418/alloy-template-bundle.git`
@@ -341,8 +341,8 @@ flowchart TB
 To update playbooks or templates:
 
 ```bash
-# Work in the Bitbucket-backed clone
-cd /home/imagine/product-observavility
+# Work in the template clone
+cd /home/imagine/tier2-ansible-collection
 
 git pull origin main
 
@@ -366,15 +366,16 @@ git push origin main
 
 The next AWX job launch will automatically pull the updated commit from the local mirror because `scm_update_on_launch` is enabled.
 
-### 6.3a Script-only bundle import when the source repo is `product-observavility`
+### 6.3a Script-only bundle import when the source repo is `tier2-ansible-collection`
 
-On monlog4 the bundle source may live in a git repo at `/home/imagine/product-observavility` rather than in `~/observability-stack/alloy-bundle`.
-In that case the bare repo used by AWX must be populated from the product repo before seeding AWX:
+After `04-deploy-awx.sh`, clone the template repo onto the host and then publish it into the local AWX mirror before seeding AWX:
 
 ```bash
+git clone <tier2-ansible-collection-url> ~/tier2-ansible-collection
+
 bash ~/observability-stack/scripts/deploy/06-setup-alloy-repo.sh \
   ~/observability-stack \
-  /home/imagine/product-observavility
+  ~/tier2-ansible-collection
 
 bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
 ```
@@ -390,14 +391,14 @@ bash ~/observability-stack/scripts/deploy/05-seed-awx.sh
 
 `06-setup-alloy-repo.sh` now supports this directly:
 - optional second arg = explicit bundle source path
-- default source = `REPO_DIR/alloy-bundle`
-- fallback sources = `~/product-observavility`, then `~/product-observability`
+- default source = `~/tier2-ansible-collection`
+- fallback source = `REPO_DIR/alloy-bundle`
 - when the source is a git repo, it pushes the current HEAD into `/tmp/git-repos/alloy-template-bundle.git` as branch `main` and sets the bare repo HEAD to `main`
 
 Equivalent manual commands, if needed:
 
 ```bash
-cd /home/imagine/product-observavility
+cd /home/imagine/tier2-ansible-collection
 git push /tmp/git-repos/alloy-template-bundle.git HEAD:refs/heads/main
 git --git-dir=/tmp/git-repos/alloy-template-bundle.git symbolic-ref HEAD refs/heads/main
 ```
