@@ -6,7 +6,7 @@
 #
 # What this does:
 #   1. Creates a bare git repo for the Alloy template bundle
-#   2. Populates it from an explicit bundle source, ~/tier2-ansible-collection,
+#   2. Populates it from an explicit bundle source, ~/product-observability,
 #      or REPO_DIR/alloy-bundle
 #   3. Preserves git history when the source is itself a git repo
 #   4. Starts git-daemon to serve the repo over git:// protocol
@@ -32,9 +32,8 @@ except KeyError:
     print(fallback)
 PY
 )"
-DEFAULT_BUNDLE_SOURCE="${INSTALL_HOME}/tier2-ansible-collection"
+DEFAULT_BUNDLE_SOURCE="${INSTALL_HOME}/product-observability"
 FALLBACK_BUNDLE_SOURCE_1="${REPO_DIR}/alloy-bundle"
-FALLBACK_BUNDLE_SOURCE_2=""
 
 # --- Colours ------------------------------------------------------------------
 RED='\033[0;31m'
@@ -46,6 +45,12 @@ log()  { echo -e "${GREEN}[OK]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step() { echo -e "\n${YELLOW}>>> $*${NC}"; }
+
+published_repo_ready() {
+    [[ -d "${BARE_REPO}" ]] || return 1
+    git --git-dir="${BARE_REPO}" show-ref --verify --quiet refs/heads/main || return 1
+    git --git-dir="${BARE_REPO}" rev-parse --verify refs/heads/main^{commit} >/dev/null 2>&1
+}
 
 # --- Source selection ---------------------------------------------------------
 select_bundle_source() {
@@ -59,13 +64,8 @@ select_bundle_source() {
         return 0
     fi
 
-    if [[ -d "${FALLBACK_BUNDLE_SOURCE_1}" ]]; then
+    if [[ -n "${FALLBACK_BUNDLE_SOURCE_1}" && -d "${FALLBACK_BUNDLE_SOURCE_1}" ]]; then
         echo "${FALLBACK_BUNDLE_SOURCE_1}"
-        return 0
-    fi
-
-    if [[ -n "${FALLBACK_BUNDLE_SOURCE_2}" && -d "${FALLBACK_BUNDLE_SOURCE_2}" ]]; then
-        echo "${FALLBACK_BUNDLE_SOURCE_2}"
         return 0
     fi
 
@@ -146,17 +146,34 @@ if [[ -d "${BUNDLE_SOURCE}" ]]; then
 else
     warn "No bundle source found at ${BUNDLE_SOURCE}"
     echo "  Clone the Alloy template repo first, for example:"
-    echo "    git clone <tier2-ansible-collection-url> ${INSTALL_HOME}/tier2-ansible-collection"
+    echo "    git clone <product-observability-url> ${INSTALL_HOME}/product-observability"
     echo ""
     echo "  Supported source locations are:"
     echo "    1. explicit second argument"
-    echo "    2. ${INSTALL_HOME}/tier2-ansible-collection"
+    echo "    2. ${INSTALL_HOME}/product-observability"
     echo "    3. ${REPO_DIR}/alloy-bundle"
     echo ""
     echo "  Manual fallback after cloning:"
-    echo "    cd ${INSTALL_HOME}/tier2-ansible-collection"
+    echo "    cd ${INSTALL_HOME}/product-observability"
     echo "    git push ${BARE_REPO} HEAD:refs/heads/main"
     echo "    git --git-dir=${BARE_REPO} symbolic-ref HEAD refs/heads/main"
+
+    if [[ -n "${EXPLICIT_BUNDLE_SOURCE}" ]]; then
+        err "Explicit bundle source does not exist: ${EXPLICIT_BUNDLE_SOURCE}"
+        exit 1
+    fi
+
+    if published_repo_ready; then
+        warn "Continuing with the existing published main branch in ${BARE_REPO}"
+    else
+        err "Bare repo ${BARE_REPO} is empty. Clone/publish the bundle first, then rerun this script."
+        exit 1
+    fi
+fi
+
+if ! published_repo_ready; then
+    err "Bare repo ${BARE_REPO} does not contain a published main branch with at least one commit"
+    exit 1
 fi
 
 # --- Start git-daemon ---------------------------------------------------------
@@ -206,10 +223,14 @@ if git clone "git://${HOST_IP}:9418/alloy-template-bundle.git" "${TEST_DIR}/test
         CLONE_HEAD=$(git -C "${TEST_DIR}/test" rev-parse HEAD 2>/dev/null || echo "UNKNOWN")
         log "Clone successful (${COMMIT_COUNT} commits, head ${CLONE_HEAD})"
     else
-        warn "Clone succeeded but the repo has no commits yet"
+        err "Clone succeeded but the repo has no commits yet"
+        rm -rf "${TEST_DIR}"
+        exit 1
     fi
 else
-    warn "Clone test failed — git-daemon may need a moment"
+    err "Clone test failed — git-daemon may need a moment, or the host firewall/network is blocking git://"
+    rm -rf "${TEST_DIR}"
+    exit 1
 fi
 rm -rf "${TEST_DIR}"
 
