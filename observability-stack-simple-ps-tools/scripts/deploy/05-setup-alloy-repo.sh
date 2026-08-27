@@ -6,8 +6,8 @@
 #
 # What this does:
 #   1. Creates a bare git repo for the Alloy template bundle
-#   2. Populates it from an explicit bundle source, ~/product-observability,
-#      or REPO_DIR/alloy-bundle
+#   2. Populates it from an explicit bundle source, ~/tier2-alloy-role,
+#      ~/product-observability, or REPO_DIR/alloy-bundle
 #   3. Preserves git history when the source is itself a git repo
 #   4. Starts git-daemon to serve the repo over git:// protocol
 #   5. Verifies the repo is accessible
@@ -32,7 +32,8 @@ except KeyError:
     print(fallback)
 PY
 )"
-DEFAULT_BUNDLE_SOURCE="${INSTALL_HOME}/product-observability"
+DEFAULT_BUNDLE_SOURCE_1="${INSTALL_HOME}/tier2-alloy-role"
+DEFAULT_BUNDLE_SOURCE_2="${INSTALL_HOME}/product-observability"
 FALLBACK_BUNDLE_SOURCE_1="${REPO_DIR}/alloy-bundle"
 
 # --- Colours ------------------------------------------------------------------
@@ -59,8 +60,13 @@ select_bundle_source() {
         return 0
     fi
 
-    if [[ -d "${DEFAULT_BUNDLE_SOURCE}" ]]; then
-        echo "${DEFAULT_BUNDLE_SOURCE}"
+    if [[ -d "${DEFAULT_BUNDLE_SOURCE_1}" ]]; then
+        echo "${DEFAULT_BUNDLE_SOURCE_1}"
+        return 0
+    fi
+
+    if [[ -d "${DEFAULT_BUNDLE_SOURCE_2}" ]]; then
+        echo "${DEFAULT_BUNDLE_SOURCE_2}"
         return 0
     fi
 
@@ -69,7 +75,7 @@ select_bundle_source() {
         return 0
     fi
 
-    echo "${DEFAULT_BUNDLE_SOURCE}"
+    echo "${DEFAULT_BUNDLE_SOURCE_1}"
 }
 
 BUNDLE_SOURCE="$(select_bundle_source)"
@@ -146,15 +152,16 @@ if [[ -d "${BUNDLE_SOURCE}" ]]; then
 else
     warn "No bundle source found at ${BUNDLE_SOURCE}"
     echo "  Clone the Alloy template repo first, for example:"
-    echo "    git clone <product-observability-url> ${INSTALL_HOME}/product-observability"
+    echo "    git clone <tier2-alloy-role-url> ${INSTALL_HOME}/tier2-alloy-role"
     echo ""
     echo "  Supported source locations are:"
     echo "    1. explicit second argument"
-    echo "    2. ${INSTALL_HOME}/product-observability"
-    echo "    3. ${REPO_DIR}/alloy-bundle"
+    echo "    2. ${INSTALL_HOME}/tier2-alloy-role"
+    echo "    3. ${INSTALL_HOME}/product-observability"
+    echo "    4. ${REPO_DIR}/alloy-bundle"
     echo ""
     echo "  Manual fallback after cloning:"
-    echo "    cd ${INSTALL_HOME}/product-observability"
+    echo "    cd ${INSTALL_HOME}/tier2-alloy-role"
     echo "    git push ${BARE_REPO} HEAD:refs/heads/main"
     echo "    git --git-dir=${BARE_REPO} symbolic-ref HEAD refs/heads/main"
 

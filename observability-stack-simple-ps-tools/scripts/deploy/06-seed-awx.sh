@@ -12,7 +12,8 @@
 #   5. Creates or updates the 'alloy-inventory' inventory
 #   6. Creates or updates the 'alloy-credential' machine credential
 #   7. Creates or updates separate Linux and Windows AWX job templates
-#   8. Creates inventory groups from playbooks/vars/alloy.yml and bundle overlays
+#   8. Creates inventory groups from either the curated playbooks/vars/alloy.yml
+#      layout or the tier2-alloy-role vars/main.yml layout
 #
 # Prerequisites: AWX running (04-deploy-awx.sh), Alloy repo (05-setup-alloy-repo.sh)
 # ==============================================================================
@@ -106,6 +107,11 @@ resolve_windows_playbook() {
 
     if repo_has_playbook "playbooks/alloy_windows.yml"; then
         echo "playbooks/alloy_windows.yml"
+        return 0
+    fi
+
+    if repo_has_playbook "playbooks/alloy-deploy.yml" && repo_has_path "vars/main.yml"; then
+        echo "playbooks/alloy-deploy.yml"
         return 0
     fi
 
@@ -207,6 +213,7 @@ def git_show(path: str) -> str:
     return subprocess.check_output(
         ["git", f"--git-dir={bare_repo}", "show", f"{treeish}:{path}"],
         text=True,
+        stderr=subprocess.DEVNULL,
     )
 
 def git_ls(prefix: str):
@@ -306,107 +313,164 @@ def unique_keep_order(values):
             out.append(value)
     return out
 
-alloy_lines = git_show("playbooks/vars/alloy.yml").splitlines()
-components_by_product = parse_map_of_lists(alloy_lines, "components_by_product")
-compose_by_product = parse_map_of_scalars(alloy_lines, "compose_by_product")
-windows_groups = parse_top_level_list(alloy_lines, "windows_groups")
-linux_groups = parse_top_level_list(alloy_lines, "linux_groups")
+def parse_scalar_map(lines, key):
+    out = collections.OrderedDict()
+    in_section = False
+    for line in lines:
+        if re.match(rf"^{re.escape(key)}:\s*$", line):
+            in_section = True
+            continue
+        if in_section and re.match(r"^[A-Za-z0-9_]+:\s*$", line):
+            break
+        if not in_section:
+            continue
+        m = re.match(r"^\s{2}([A-Za-z0-9_.-]+):\s+(.+?)\s*$", line)
+        if m:
+            out[m.group(1)] = m.group(2).strip()
+    return out
 
-overlays = {}
-for path in git_ls("playbooks/templates/alloy/group_vars"):
-    base = os.path.basename(path)
-    if not base.endswith(".yml.j2") or base.startswith('.'):
-        continue
-    raw = git_show(path)
-    product = parse_simple_value(raw, "product")
-    if not product:
-        continue
-    item = overlays.setdefault(product, {
-        "files": [],
-        "parts": [],
-        "extra_keys": [],
+
+def build_curated_group_map(alloy_lines):
+    components_by_product = parse_map_of_lists(alloy_lines, "components_by_product")
+    compose_by_product = parse_map_of_scalars(alloy_lines, "compose_by_product")
+    windows_groups = parse_top_level_list(alloy_lines, "windows_groups")
+    linux_groups = parse_top_level_list(alloy_lines, "linux_groups")
+
+    overlays = {}
+    for path in git_ls("playbooks/templates/alloy/group_vars"):
+        base = os.path.basename(path)
+        if not base.endswith(".yml.j2") or base.startswith('.'):
+            continue
+        raw = git_show(path)
+        product = parse_simple_value(raw, "product")
+        if not product:
+            continue
+        item = overlays.setdefault(product, {
+            "files": [],
+            "parts": [],
+            "extra_keys": [],
+        })
+        item["files"].append(base)
+        item["parts"].append(f"# source: {base}\n{sanitize_group_vars(raw)}")
+        extra_key = parse_simple_value(raw, "alloy_component_extras")
+        if extra_key:
+            item["extra_keys"].append(extra_key)
+
+    def overlay_for_alias(alias):
+        for product, meta in overlays.items():
+            if f"{alias}.yml.j2" in meta["files"]:
+                return product
+        return None
+
+    def resolve_group_name(alias):
+        base = alias.replace('-', '_')
+        if base in overlays:
+            return base
+        overlay_product = overlay_for_alias(alias)
+        if overlay_product:
+            return overlay_product
+        if alias in components_by_product:
+            return alias
+        if base in components_by_product:
+            return base
+        return base
+
+    ordered_candidates = []
+    for alias in windows_groups + linux_groups:
+        ordered_candidates.append(resolve_group_name(alias))
+    for product in compose_by_product.keys():
+        ordered_candidates.append(product)
+    for product in components_by_product.keys():
+        if product.endswith("_extra") or product.endswith("_extras"):
+            continue
+        ordered_candidates.append(product)
+
+    group_map = collections.OrderedDict()
+    resolved_windows_groups = {resolve_group_name(alias) for alias in windows_groups}
+    for product in ordered_candidates:
+        if product in group_map:
+            continue
+        base_components = components_by_product.get(product, [])
+        overlay = overlays.get(product)
+        extra_keys = unique_keep_order(overlay.get("extra_keys", [])) if overlay else []
+        extra_components = []
+        for extra_key in extra_keys:
+            extra_components.extend(components_by_product.get(extra_key, []))
+        extra_components = unique_keep_order(extra_components)
+        resolved = unique_keep_order(base_components + extra_components)
+        compose_file = compose_by_product.get(product)
+
+        vars_lines = []
+        sources = ["playbooks/vars/alloy.yml"]
+        if overlay:
+            vars_lines.extend("\n\n".join(overlay["parts"]).splitlines())
+            sources.extend([f"playbooks/templates/alloy/group_vars/{name}" for name in overlay["files"]])
+        else:
+            vars_lines.append(f"product: {product}")
+
+        vars_lines.append("# source: playbooks/vars/alloy.yml")
+        if product in resolved_windows_groups:
+            vars_lines.extend([
+                "ansible_connection: winrm",
+                "ansible_port: 5985",
+                "ansible_ssh_port: 5985",
+                "ansible_winrm_transport: ntlm",
+                "ansible_winrm_server_cert_validation: ignore",
+            ])
+        vars_lines.extend(yaml_list_block("alloy_components_from_product", base_components))
+        if extra_keys:
+            vars_lines.extend(yaml_list_block("alloy_component_extras_resolved_from", extra_keys))
+            vars_lines.extend(yaml_list_block("alloy_components_from_extra_set", extra_components))
+        if compose_file:
+            vars_lines.append(f"compose_file: {compose_file}")
+        vars_lines.extend(yaml_list_block("alloy_components_resolved", resolved))
+
+        group_map[product] = {
+            "variables": "\n".join(vars_lines).rstrip() + "\n",
+            "sources": "playbooks/vars/alloy.yml" if not overlay else ", ".join(sources),
+        }
+    return group_map
+
+
+def build_role_group_map(alloy_lines):
+    components_by_product = parse_map_of_lists(alloy_lines, "components_by_product")
+    compose_by_product = parse_map_of_scalars(alloy_lines, "compose_by_product")
+    connection_by_product = parse_map_of_scalars(alloy_lines, "connection_by_product")
+    connection_profiles = collections.OrderedDict({
+        "windows_ansible_connection": parse_scalar_map(alloy_lines, "windows_ansible_connection"),
+        "unix_ansible_connection": parse_scalar_map(alloy_lines, "unix_ansible_connection"),
     })
-    item["files"].append(base)
-    item["parts"].append(f"# source: {base}\n{sanitize_group_vars(raw)}")
-    extra_key = parse_simple_value(raw, "alloy_component_extras")
-    if extra_key:
-        item["extra_keys"].append(extra_key)
+
+    group_map = collections.OrderedDict()
+    for product, base_components in components_by_product.items():
+        vars_lines = [f"product: {product}", "# source: vars/main.yml"]
+        connection_profile_name = connection_by_product.get(product)
+        if connection_profile_name:
+            profile_vars = connection_profiles.get(connection_profile_name, {})
+            for key, value in profile_vars.items():
+                vars_lines.append(f"{key}: {value}")
+        vars_lines.extend(yaml_list_block("alloy_components", base_components))
+        vars_lines.extend(yaml_list_block("alloy_components_from_product", base_components))
+        vars_lines.extend(yaml_list_block("alloy_components_resolved", base_components))
+        compose_file = compose_by_product.get(product)
+        if compose_file:
+            vars_lines.append(f"compose_file: {compose_file}")
+        group_map[product] = {
+            "variables": "\n".join(vars_lines).rstrip() + "\n",
+            "sources": "vars/main.yml",
+        }
+    return group_map
 
 
-def overlay_for_alias(alias):
-    for product, meta in overlays.items():
-        if f"{alias}.yml.j2" in meta["files"]:
-            return product
-    return None
-
-
-def resolve_group_name(alias):
-    base = alias.replace('-', '_')
-    if base in overlays:
-        return base
-    overlay_product = overlay_for_alias(alias)
-    if overlay_product:
-        return overlay_product
-    if alias in components_by_product:
-        return alias
-    if base in components_by_product:
-        return base
-    return base
-
-ordered_candidates = []
-for alias in windows_groups + linux_groups:
-    ordered_candidates.append(resolve_group_name(alias))
-for product in compose_by_product.keys():
-    ordered_candidates.append(product)
-for product in components_by_product.keys():
-    if product.endswith("_extra") or product.endswith("_extras"):
-        continue
-    ordered_candidates.append(product)
-
-group_map = collections.OrderedDict()
-resolved_windows_groups = {resolve_group_name(alias) for alias in windows_groups}
-for product in ordered_candidates:
-    if product in group_map:
-        continue
-    base_components = components_by_product.get(product, [])
-    overlay = overlays.get(product)
-    extra_keys = unique_keep_order(overlay.get("extra_keys", [])) if overlay else []
-    extra_components = []
-    for extra_key in extra_keys:
-        extra_components.extend(components_by_product.get(extra_key, []))
-    extra_components = unique_keep_order(extra_components)
-    resolved = unique_keep_order(base_components + extra_components)
-    compose_file = compose_by_product.get(product)
-
-    vars_lines = []
-    sources = ["playbooks/vars/alloy.yml"]
-    if overlay:
-        vars_lines.extend("\n\n".join(overlay["parts"]).splitlines())
-        sources.extend([f"playbooks/templates/alloy/group_vars/{name}" for name in overlay["files"]])
-    else:
-        vars_lines.append(f"product: {product}")
-
-    vars_lines.append("# source: playbooks/vars/alloy.yml")
-    if product in resolved_windows_groups:
-        vars_lines.extend([
-            "ansible_connection: winrm",
-            "ansible_port: 5985",
-            "ansible_ssh_port: 5985",
-            "ansible_winrm_transport: ntlm",
-            "ansible_winrm_server_cert_validation: ignore",
-        ])
-    vars_lines.extend(yaml_list_block("alloy_components_from_product", base_components))
-    if extra_keys:
-        vars_lines.extend(yaml_list_block("alloy_component_extras_resolved_from", extra_keys))
-        vars_lines.extend(yaml_list_block("alloy_components_from_extra_set", extra_components))
-    if compose_file:
-        vars_lines.append(f"compose_file: {compose_file}")
-    vars_lines.extend(yaml_list_block("alloy_components_resolved", resolved))
-
-    group_map[product] = {
-        "variables": "\n".join(vars_lines).rstrip() + "\n",
-        "sources": ", ".join(sources),
-    }
+try:
+    alloy_lines = git_show("playbooks/vars/alloy.yml").splitlines()
+    group_map = build_curated_group_map(alloy_lines)
+except subprocess.CalledProcessError:
+    try:
+        alloy_lines = git_show("vars/main.yml").splitlines()
+        group_map = build_role_group_map(alloy_lines)
+    except subprocess.CalledProcessError:
+        raise SystemExit("Published bundle does not contain playbooks/vars/alloy.yml or vars/main.yml")
 
 for product, item in group_map.items():
     print("\t".join([
@@ -584,7 +648,7 @@ step "Creating inventory groups"
 GROUP_DISCOVERY_OUTPUT="$(discover_inventory_groups)"
 
 if [[ -z "${GROUP_DISCOVERY_OUTPUT}" ]]; then
-    err "No inventory groups could be discovered from playbooks/vars/alloy.yml in ${BARE_REPO}"
+    err "No inventory groups could be discovered from playbooks/vars/alloy.yml or vars/main.yml in ${BARE_REPO}"
     exit 1
 fi
 
